@@ -34,9 +34,9 @@ export default function IndexPage() {
             <div className="h-96">
               <PriceChart />
             </div>
-            
+
             {/* Trading Interface */}
-            <TradingInterface />
+            {/* <TradingInterface /> */}
           </div>
         </div>
 
@@ -45,10 +45,10 @@ export default function IndexPage() {
           <div className="space-y-6">
             {/* State Channel Manager */}
             <StateChannelManager />
-            
+
             {/* Order Book */}
             <OrderBook />
-            
+
             {/* Arbitrage Alerts */}
             <ArbitrageAlerts />
           </div>

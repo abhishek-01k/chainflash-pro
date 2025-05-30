@@ -16,6 +16,8 @@ import { nitroliteService } from '@/lib/services/nitrolite';
 import { useToast } from '@/hooks/use-toast';
 
 import type { Token, OneInchQuote } from '@/types';
+import LimitOrder from './limitOrder/LimitOrder';
+import { useTrading } from '@/contexts/TradingContext';
 
 // Real token data - would be fetched from 1inch token list API in production
 const PRODUCTION_TOKENS: Token[] = [
@@ -69,16 +71,7 @@ interface TradingFormData {
 }
 
 export function TradingInterface() {
-  const [formData, setFormData] = useState<TradingFormData>({
-    fromToken: PRODUCTION_TOKENS[0],
-    toToken: PRODUCTION_TOKENS[1],
-    fromAmount: '',
-    slippage: 0.5,
-    useStateChannel: true,
-    orderType: 'market',
-  });
-
-  const [quote, setQuote] = useState<OneInchQuote | null>(null);
+  const { formData, setFormData, quote, setQuote } = useTrading();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeChannels, setActiveChannels] = useState(0);
@@ -98,41 +91,6 @@ export function TradingInterface() {
     loadChannelCount();
   }, []);
 
-  // Get real quote from 1inch API
-  const handleGetQuote = async () => {
-    if (!formData.fromToken || !formData.toToken || !formData.fromAmount) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const fromAmountWei = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
-      
-      const quoteData = await oneInchService.getQuote({
-        chainId: 1, // Ethereum mainnet
-        src: formData.fromToken.address,
-        dst: formData.toToken.address,
-        amount: fromAmountWei,
-        includeTokensInfo: true,
-        includeProtocols: true,
-      });
-
-      setQuote(quoteData);
-    } catch (err) {
-      console.error('Quote error:', err);
-      setError('Failed to get quote from 1inch API');
-      toast({
-        title: "Quote Error",
-        description: "Failed to fetch price quote. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Execute trade with real APIs
   const handleExecuteTrade = async () => {
     if (!quote) return;
@@ -142,11 +100,11 @@ export function TradingInterface() {
 
     try {
       const fromAmountWei = BigInt(Math.floor(parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)));
-      
+
       if (formData.useStateChannel && activeChannels > 0) {
         // Execute via Nitrolite state channel (instant, gas-free)
         const channelId = 'active-channel-id'; // Would get from active channels
-        
+
         const tradeResult = await nitroliteService.executeInstantTrade(
           channelId,
           formData.fromToken.address,
@@ -159,12 +117,12 @@ export function TradingInterface() {
           title: "Instant Trade Executed",
           description: `Trade executed instantly via state channel! Trade ID: ${tradeResult.id.slice(0, 10)}...`,
         });
-        
+
         console.log('State channel trade result:', tradeResult);
       } else {
         // Execute via 1inch regular swap
         const mockUserAddress = '0x1234567890123456789012345678901234567890';
-        
+
         const swapResult = await oneInchService.getSwap({
           chainId: 1,
           src: formData.fromToken.address,
@@ -337,18 +295,8 @@ export function TradingInterface() {
     setQuote(null);
   };
 
-  // Auto-quote on amount/token changes
-  useEffect(() => {
-    if (formData.fromAmount && formData.fromToken && formData.toToken && formData.orderType === 'market') {
-      const debounceTimer = setTimeout(() => {
-        handleGetQuote();
-      }, 500);
-      return () => clearTimeout(debounceTimer);
-    }
-  }, [formData.fromAmount, formData.fromToken, formData.toToken, formData.orderType]);
-
   return (
-    <Card className="w-full">
+    <Card className="w-[450px] mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
@@ -359,8 +307,12 @@ export function TradingInterface() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs 
-          value={formData.orderType} 
+
+        <LimitOrder />
+
+        <Tabs
+          className='pt-4'
+          value={formData.orderType}
           onValueChange={(value) => setFormData({
             ...formData,
             orderType: value as any
@@ -390,83 +342,6 @@ export function TradingInterface() {
                     setFormData({ ...formData, useStateChannel: checked })
                   }
                 />
-              </div>
-
-              {/* From Token */}
-              <div className="space-y-2">
-                <Label>From</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.fromToken.address}
-                    onValueChange={(address) => {
-                      const token = PRODUCTION_TOKENS.find(t => t.address === address);
-                      if (token) setFormData({ ...formData, fromToken: token });
-                    }}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRODUCTION_TOKENS.map((token) => (
-                        <SelectItem key={token.address} value={token.address}>
-                          {token.symbol}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    placeholder="0.0"
-                    value={formData.fromAmount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fromAmount: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Swap Button */}
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={swapTokens}
-                  className="rounded-full"
-                >
-                  <ArrowUpDown className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* To Token */}
-              <div className="space-y-2">
-                <Label>To</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.toToken.address}
-                    onValueChange={(address) => {
-                      const token = PRODUCTION_TOKENS.find(t => t.address === address);
-                      if (token) setFormData({ ...formData, toToken: token });
-                    }}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRODUCTION_TOKENS.map((token) => (
-                        <SelectItem key={token.address} value={token.address}>
-                          {token.symbol}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="text"
-                    placeholder="0.0"
-                    value={quote ? (Number(quote.toTokenAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
-                    readOnly
-                    className="bg-muted/50"
-                  />
-                </div>
               </div>
 
               {/* Quote Display */}
