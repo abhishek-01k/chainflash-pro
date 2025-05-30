@@ -1,4 +1,6 @@
 import { HermesClient } from '@pythnetwork/hermes-client';
+import { PythHttpClient, getPythProgramKeyForCluster } from '@pythnetwork/client';
+import { EvmPriceServiceConnection } from '@pythnetwork/pyth-evm-js';
 
 // Real Pyth Network configuration
 const HERMES_ENDPOINT = 'https://hermes.pyth.network';
