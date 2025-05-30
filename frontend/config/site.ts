@@ -1,18 +1,12 @@
-export type SiteConfig = typeof siteConfig
-
 export const siteConfig = {
-  name: "Next.js",
-  description:
-    "Beautifully designed components that you can copy and paste into your apps. Accessible. Customizable. Open Source.",
-  mainNav: [
-    {
-      title: "Home",
-      href: "/",
-    },
-  ],
+  name: "ChainFlash Pro",
+  description: "Cross-Chain State Channel Trading Platform - Instant settlements with Nitrolite, powered by 1inch and Pyth Network",
+  url: "https://chainflash.pro",
+  ogImage: "/og-image.png",
   links: {
-    twitter: "https://twitter.com/shadcn",
-    github: "https://github.com/shadcn/ui",
-    docs: "https://ui.shadcn.com",
+    twitter: "https://twitter.com/chainflashpro",
+    github: "https://github.com/chainflashpro",
   },
 }
+
+export type SiteConfig = typeof siteConfig;

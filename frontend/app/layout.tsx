@@ -7,13 +7,18 @@ import { cn } from "@/lib/utils"
 import { SiteHeader } from "@/components/site-header"
 import { TailwindIndicator } from "@/components/tailwind-indicator"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Providers } from "./providers"
 
 export const metadata: Metadata = {
   title: {
-    default: siteConfig.name,
-    template: `%s - ${siteConfig.name}`,
+    default: "ChainFlash Pro",
+    template: `%s - ChainFlash Pro`,
   },
-  description: siteConfig.description,
+  description: "Cross-Chain State Channel Trading Platform - Instant settlements with Nitrolite, powered by 1inch and Pyth Network",
+  keywords: ["DeFi", "Trading", "State Channels", "Cross-Chain", "1inch", "Pyth Network", "Nitrolite"],
+  authors: [{ name: "ChainFlash Pro Team" }],
+  creator: "ChainFlash Pro",
+  publisher: "ChainFlash Pro",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "white" },
     { media: "(prefers-color-scheme: dark)", color: "black" },
@@ -22,6 +27,39 @@ export const metadata: Metadata = {
     icon: "/favicon.ico",
     shortcut: "/favicon-16x16.png",
     apple: "/apple-touch-icon.png",
+  },
+  manifest: "/manifest.json",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://chainflash.pro",
+    siteName: "ChainFlash Pro",
+    title: "ChainFlash Pro - Cross-Chain State Channel Trading",
+    description: "Professional-grade cross-chain trading with instant settlements through state channels",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "ChainFlash Pro",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ChainFlash Pro - Cross-Chain State Channel Trading",
+    description: "Professional-grade cross-chain trading with instant settlements through state channels",
+    images: ["/og-image.png"],
+    creator: "@chainflashpro",
   },
 }
 
@@ -40,12 +78,16 @@ export default function RootLayout({ children }: RootLayoutProps) {
             fontSans.variable
           )}
         >
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            <div className="relative flex min-h-screen flex-col">
-              <SiteHeader />
-              <div className="flex-1">{children}</div>
-            </div>
-            <TailwindIndicator />
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+            <Providers>
+              <div className="relative flex min-h-screen flex-col">
+                <SiteHeader />
+                <main className="flex-1">
+                  {children}
+                </main>
+              </div>
+              <TailwindIndicator />
+            </Providers>
           </ThemeProvider>
         </body>
       </html>
