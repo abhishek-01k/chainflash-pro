@@ -1,4 +1,4 @@
-import "@/styles/globals.css"
+import "./globals.css"
 import { Metadata } from "next"
 
 import { siteConfig } from "@/config/site"
@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header"
 import { TailwindIndicator } from "@/components/tailwind-indicator"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Providers } from "./providers"
+import { Toaster } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
   title: {
@@ -87,6 +88,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 </main>
               </div>
               <TailwindIndicator />
+              <Toaster />
             </Providers>
           </ThemeProvider>
         </body>

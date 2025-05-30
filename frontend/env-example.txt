@@ -1,0 +1,32 @@
+# Next.js Configuration
+NEXT_PUBLIC_APP_NAME="ChainFlash Pro"
+NEXT_PUBLIC_APP_DESCRIPTION="Cross-Chain State Channel Trading Platform"
+
+# Wallet & Web3 Configuration
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="your_wallet_connect_project_id"
+NEXT_PUBLIC_ALCHEMY_API_KEY="your_alchemy_api_key"
+
+# 1inch Configuration
+NEXT_PUBLIC_1INCH_API_KEY="your_1inch_api_key"
+NEXT_PUBLIC_1INCH_BASE_URL="https://api.1inch.dev"
+
+# Pyth Network Configuration
+NEXT_PUBLIC_PYTH_HERMES_ENDPOINT="https://hermes.pyth.network"
+NEXT_PUBLIC_PYTH_PRICE_SERVICE_ENDPOINT="https://xc-mainnet.pyth.network"
+
+# Nitrolite Configuration
+NITROLITE_CUSTODY_ADDRESS="0x0000000000000000000000000000000000000000"
+NITROLITE_ADJUDICATOR_ADDRESS="0x0000000000000000000000000000000000000000"
+NEXT_PUBLIC_NITROLITE_RPC_URL="wss://nitrolite-rpc.yellow.org"
+
+# Bitcoin Configuration (for cross-chain)
+BITCOIN_TESTNET_RPC_URL="https://bitcoin-testnet-rpc.example.com"
+
+# Network Configuration
+NEXT_PUBLIC_ETHEREUM_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/"
+NEXT_PUBLIC_ARBITRUM_RPC_URL="https://arb-mainnet.g.alchemy.com/v2/"
+NEXT_PUBLIC_OPTIMISM_RPC_URL="https://opt-mainnet.g.alchemy.com/v2/"
+NEXT_PUBLIC_POLYGON_RPC_URL="https://polygon-mainnet.g.alchemy.com/v2/"
+
+# Analytics & Monitoring
+NEXT_PUBLIC_ANALYTICS_ID="your_analytics_id" 
