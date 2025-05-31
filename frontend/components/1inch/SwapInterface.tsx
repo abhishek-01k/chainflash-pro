@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAccount, useChainId, usePublicClient, useWalletClient, useSendTransaction } from 'wagmi';
-import { parseUnits, formatUnits, parseEther } from 'viem';
+import { useAccount, useChainId, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
+import { parseUnits, formatUnits } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,8 +30,11 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
-  const { data: walletClient } = useWalletClient();
-  const { sendTransaction } = useSendTransaction();
+  const { sendTransaction, isPending: isSendPending } = useSendTransaction();
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
   // State management
   const [fromAmount, setFromAmount] = useState('');
@@ -403,18 +406,30 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
           allowPartialFill: true,
         });
 
-        // Send transaction using wagmi
-        await sendTransaction({
+        console.log('Swap transaction data:', swapData.tx);
+
+        // Execute the swap transaction using wagmi
+        sendTransaction({
           to: swapData.tx.to as `0x${string}`,
           data: swapData.tx.data as `0x${string}`,
-          value: BigInt(swapData.tx.value),
-          gas: BigInt(swapData.tx.gas),
-          gasPrice: BigInt(swapData.tx.gasPrice),
-        });
-
-        toast({
-          title: 'Swap Initiated',
-          description: 'Your swap transaction has been sent to the network.',
+          value: BigInt(swapData.tx.value || 0),
+        }, {
+          onSuccess: (hash) => {
+            setTxHash(hash);
+            toast({
+              title: 'Swap Submitted',
+              description: 'Transaction sent to network...',
+            });
+          },
+          onError: (error) => {
+            console.error('Transaction failed:', error);
+            setError(error.message || 'Transaction failed');
+            toast({
+              title: 'Swap Failed',
+              description: error.message || 'Transaction failed',
+              variant: 'destructive',
+            });
+          }
         });
       }
 
@@ -434,6 +449,21 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
       setIsLoading(false);
     }
   };
+
+  // Handle transaction confirmation
+  useEffect(() => {
+    if (isConfirmed) {
+      toast({
+        title: 'Swap Complete',
+        description: 'Transaction confirmed successfully!',
+      });
+      // Reset form
+      setFromAmount('');
+      setToAmount('');
+      setQuote(null);
+      setTxHash(undefined);
+    }
+  }, [isConfirmed, toast]);
 
   // Swap token positions
   const handleSwapTokens = () => {
@@ -647,14 +677,18 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
         {/* Swap Button */}
         <Button
           onClick={handleSwap}
-          disabled={!fromToken || !toToken || !fromAmount || !toAmount || isLoading}
+          disabled={!fromToken || !toToken || !fromAmount || !toAmount || isLoading || isSendPending || isConfirming}
           className="w-full h-12 text-base font-medium"
           size="lg"
         >
-          {isLoading ? (
+          {isLoading || isSendPending || isConfirming ? (
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              <span>Loading...</span>
+              <span>
+                {isLoading ? 'Loading...' : 
+                 isSendPending ? 'Confirming...' : 
+                 isConfirming ? 'Processing...' : 'Loading...'}
+              </span>
             </div>
           ) : useGasless ? (
             <div className="flex items-center space-x-2">
