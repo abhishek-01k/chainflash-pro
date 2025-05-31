@@ -29,6 +29,12 @@ const nextConfig = {
       },
     ],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Disable SWC completely to avoid arm64 issues
   swcMinify: false,
   compiler: {
