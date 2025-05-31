@@ -49,164 +49,6 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
   const currentChainId = chainId as SupportedChainId;
   const isValidChain = currentChainId && oneInchService.isChainSupported(currentChainId);
 
-  // Load supported tokens for current chain
-  useEffect(() => {
-    async function loadTokens() {
-      if (!isValidChain) return;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        console.log('Loading tokens for chain:', currentChainId);
-
-        const tokensData = await oneInchService.getTokens(currentChainId);
-        console.log('Tokens loaded:', Object.keys(tokensData.tokens || tokensData || {}).length);
-
-        // Handle both possible response formats - the API returns { tokens: {...} }
-        const tokens = tokensData.tokens || tokensData;
-
-        // Ensure tokens is a proper Record<string, OneInchTokenInfo>
-        if (typeof tokens === 'object' && tokens !== null) {
-          setTokens(tokens as unknown as Record<string, OneInchTokenInfo>);
-        } else {
-          throw new Error('Invalid tokens data format');
-        }
-
-        // Set default tokens (ETH and USDC if available)
-        const ethToken = Object.values(tokens).find(t =>
-          t.symbol === 'ETH' || t.symbol === 'WETH' ||
-          t.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
-        );
-        const usdcToken = Object.values(tokens).find(t =>
-          t.symbol === 'USDC'
-        );
-
-        if (ethToken) {
-          setFromToken(ethToken);
-          console.log('Set default from token:', ethToken.symbol);
-        }
-        if (usdcToken) {
-          setToToken(usdcToken);
-          console.log('Set default to token:', usdcToken.symbol);
-        }
-
-        // If no default tokens found, use first available tokens
-        if (!ethToken && !usdcToken) {
-          const availableTokens = Object.values(tokens);
-          if (availableTokens.length >= 2) {
-            setFromToken(availableTokens[0]);
-            setToToken(availableTokens[1]);
-            console.log('Set fallback tokens:', availableTokens[0].symbol, availableTokens[1].symbol);
-          }
-        }
-
-      } catch (err: any) {
-        console.error('Error loading tokens:', err);
-        if (err.message?.includes('Configuration error')) {
-          setError('API key not configured. Please check environment variables.');
-        } else if (err.message?.includes('Unauthorized')) {
-          setError('Invalid API key. Please check your 1inch API key configuration.');
-        } else {
-          setError(`Failed to load supported tokens: ${err.message || 'Unknown error'}`);
-        }
-
-        // Load some default tokens as fallback
-        const fallbackTokens: Record<string, OneInchTokenInfo> = {
-          // Ethereum mainnet defaults
-          '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE': {
-            address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-            symbol: 'ETH',
-            name: 'Ethereum',
-            decimals: 18,
-          },
-          '0xA0b86a33E6417c5C6C02A5B63c0aA94c0CCC7c9d': {
-            address: '0xA0b86a33E6417c5C6C02A5B63c0aA94c0CCC7c9d',
-            symbol: 'USDC',
-            name: 'USD Coin',
-            decimals: 6,
-          },
-        };
-
-        // Chain-specific fallback tokens
-        if (currentChainId === 137) { // Polygon
-          fallbackTokens['0x0000000000000000000000000000000000001010'] = {
-            address: '0x0000000000000000000000000000000000001010',
-            symbol: 'MATIC',
-            name: 'Polygon',
-            decimals: 18,
-          };
-          fallbackTokens['0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'] = {
-            address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-            symbol: 'USDC',
-            name: 'USD Coin (PoS)',
-            decimals: 6,
-          };
-          fallbackTokens['0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'] = {
-            address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
-            symbol: 'WETH',
-            name: 'Wrapped Ether',
-            decimals: 18,
-          };
-          // Add USDT for better liquidity options
-          fallbackTokens['0xc2132D05D31c914a87C6611C10748AEb04B58e8F'] = {
-            address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
-            symbol: 'USDT',
-            name: 'Tether USD (PoS)',
-            decimals: 6,
-          };
-        } else if (currentChainId === 8453) { // Base
-          fallbackTokens['0x4200000000000000000000000000000000000006'] = {
-            address: '0x4200000000000000000000000000000000000006',
-            symbol: 'WETH',
-            name: 'Wrapped Ether',
-            decimals: 18,
-          };
-          fallbackTokens['0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'] = {
-            address: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
-            symbol: 'USDC',
-            name: 'USD Coin',
-            decimals: 6,
-          };
-        }
-
-        setTokens(fallbackTokens);
-
-        // Set appropriate default tokens based on chain
-        const tokensList = Object.values(fallbackTokens);
-        if (tokensList.length >= 2) {
-          // For Polygon, default to WETH -> USDC
-          if (currentChainId === 137) {
-            const wethToken = fallbackTokens['0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'];
-            const usdcToken = fallbackTokens['0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'];
-            if (wethToken && usdcToken) {
-              setFromToken(wethToken);
-              setToToken(usdcToken);
-            }
-          }
-          // For Base, default to WETH -> USDC
-          else if (currentChainId === 8453) {
-            const wethToken = fallbackTokens['0x4200000000000000000000000000000000000006'];
-            const usdcToken = fallbackTokens['0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'];
-            if (wethToken && usdcToken) {
-              setFromToken(wethToken);
-              setToToken(usdcToken);
-            }
-          }
-          // For Ethereum mainnet, default to ETH -> USDC
-          else {
-            setFromToken(tokensList[0]);
-            setToToken(tokensList[1]);
-          }
-        }
-
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadTokens();
-  }, [currentChainId, isValidChain]);
-
   // Get quote when inputs change
   const getQuote = useCallback(async () => {
     if (!fromToken || !toToken || !fromAmount || parseFloat(fromAmount) <= 0) {
@@ -507,7 +349,7 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
   }
 
   return (
-    <Card className={`${className} overflow-hidden`}>
+    <Card className={`${className} overflow-hidden `}>
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -566,7 +408,7 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
                 setFromAmount(value);
               }
             }}
-            className="text-lg h-12 text-right bg-muted/30 border-muted"
+            className="text-xl h-12 text-right bg-muted/30 border-muted [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             step="any"
             min="0"
           />
@@ -582,9 +424,9 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
             size="icon"
             onClick={handleSwapTokens}
             disabled={isLoading}
-            className="relative bg-background hover:bg-accent border-2 shadow-sm"
+            className="relative bg-background hover:bg-accent border-2 shadow-sm text-black"
           >
-            <ArrowDownUp className={`h-4 w-4 transition-transform ${isLoading ? 'animate-spin' : ''}`} />
+            <ArrowDownUp color='grey' className={`h-4 w-4 transition-transform ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
 
@@ -609,7 +451,7 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
             placeholder="0.0"
             value={toAmount}
             readOnly
-            className="text-lg h-12 text-right bg-muted/50 border-muted cursor-not-allowed"
+            className="text-lg h-12 text-right bg-muted/50 border-muted cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
 
@@ -685,9 +527,9 @@ export function SwapInterface({ className, fromToken, toToken, setFromToken, set
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
               <span>
-                {isLoading ? 'Loading...' : 
-                 isSendPending ? 'Confirming...' : 
-                 isConfirming ? 'Processing...' : 'Loading...'}
+                {isLoading ? 'Loading...' :
+                  isSendPending ? 'Confirming...' :
+                    isConfirming ? 'Processing...' : 'Loading...'}
               </span>
             </div>
           ) : useGasless ? (

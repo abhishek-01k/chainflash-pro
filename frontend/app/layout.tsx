@@ -9,6 +9,7 @@ import { TailwindIndicator } from "@/components/tailwind-indicator"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Providers } from "./providers"
 import { Toaster } from "@/components/ui/sonner"
+import Footer from "@/components/Footer"
 
 export const metadata: Metadata = {
   title: {
@@ -80,13 +81,14 @@ export default function RootLayout({ children }: RootLayoutProps) {
             fontSans.variable
           )}
         >
-          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <Providers>
               <div className="relative flex min-h-screen flex-col">
                 <SiteHeader />
                 <main className="flex-1">
                   {children}
                 </main>
+                <Footer />
               </div>
               <TailwindIndicator />
               <Toaster />

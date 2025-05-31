@@ -225,9 +225,9 @@ export default function TradingPage() {
 
       <Tabs defaultValue="market">
         <div className="">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="market">Market Swaps</TabsTrigger>
-            <TabsTrigger value="limit">Limit Orders</TabsTrigger>
+          <TabsList className="grid w-[250px] grid-cols-2">
+            <TabsTrigger value="market" className="data-[state=active]:bg-gradient-to-r  dark:data-[state=active]:bg-gradient-to-r from-teal-500 to-purple-600 rounded-lg ">Market Swaps</TabsTrigger>
+            <TabsTrigger value="limit" className="data-[state=active]:bg-gradient-to-r dark:data-[state=active]:bg-gradient-to-r from-teal-500 to-purple-600 rounded-lg">Limit Orders</TabsTrigger>
           </TabsList>
         </div>
         {isLoading || !fromToken || !toToken ? (

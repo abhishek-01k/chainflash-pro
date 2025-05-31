@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import '@rainbow-me/rainbowkit/styles.css';
 
 import {
+  darkTheme,
   getDefaultConfig,
   RainbowKitProvider,
 } from '@rainbow-me/rainbowkit';
@@ -30,10 +31,9 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <>
-
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider>
+          <RainbowKitProvider theme={darkTheme()}>
             {children}
           </RainbowKitProvider>
         </QueryClientProvider>

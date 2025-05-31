@@ -58,7 +58,7 @@ const TokenSelector = ({ value, onChange, label, tokens, otherToken }: TokenSele
             <DialogTrigger asChild>
                 <Button
                     variant="outline"
-                    className="w-full h-auto p-4 justify-start hover:bg-accent/50 transition-colors"
+                    className="w-full bg-white text-black dark:bg-black dark:text-white h-auto p-4 justify-start hover:bg-accent/50 transition-colors"
                 >
                     {value ? (
                         <div className="flex items-center space-x-3 w-full">
@@ -108,7 +108,7 @@ const TokenSelector = ({ value, onChange, label, tokens, otherToken }: TokenSele
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className=" p-0 bg-white">
+            <DialogContent className=" p-0 bg-white text-black dark:bg-black dark:text-white">
                 <DialogHeader className="p-6 pb-4">
                     <DialogTitle className="flex items-center space-x-2">
                         <span>Select {label} token</span>

@@ -262,7 +262,10 @@ class PythService {
 
   // Helper method to get pair name from price feed ID
   private getPairNameFromId(priceId: string): string {
-    const entry = Object.entries(PYTH_PRICE_FEEDS).find(([, id]) => id === priceId);
+    const formattedPriceId = priceId.startsWith('0x') ? priceId : `0x${priceId}`;
+    const entry = Object.entries(PYTH_PRICE_FEEDS).find(([, id]) => {
+      return id === formattedPriceId;
+    });
     return entry ? entry[0] : 'Unknown';
   }
 

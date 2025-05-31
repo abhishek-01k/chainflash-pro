@@ -152,8 +152,10 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
         throw new Error('Please enter both maker and taker amounts');
       }
 
-      const makingAmountBigInt = parseUnits(makerAmount, makerToken.decimals);
-      const takingAmountBigInt = parseUnits(takerAmount, takerToken.decimals);
+      // const makingAmountBigInt = parseUnits(makerAmount, makerToken.decimals);
+      const makingAmountBigInt = makerAmount
+      const takingAmountBigInt = takerAmount
+      // const takingAmountBigInt = parseUnits(takerAmount, takerToken.decimals);
 
       console.log('Parsed amounts:', {
         makingAmountBigInt: makingAmountBigInt.toString(),
@@ -342,13 +344,19 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
   return (
     <div className={`space-y-6 ${className}`}>
-      <Tabs defaultValue="create" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="create" className="flex items-center space-x-2">
+      <Tabs defaultValue="create" className="w-full space-y-6">
+        <TabsList className="grid w-full grid-cols-2 p-1 bg-muted/50 rounded-lg">
+          <TabsTrigger
+            value="create"
+            className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-black transition-all duration-200 rounded-md py-2.5"
+          >
             <Target className="w-4 h-4" />
             <span>Create Order</span>
           </TabsTrigger>
-          <TabsTrigger value="orders" className="flex items-center space-x-2">
+          <TabsTrigger
+            value="orders"
+            className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-black transition-all duration-200 rounded-md py-2.5"
+          >
             <Clock className="w-4 h-4" />
             <span>My Orders</span>
           </TabsTrigger>
@@ -416,15 +424,15 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                 )}
 
                 {/* Order Type Selection */}
-                <div className="space-y-3">
+                <div className="flex flex-col gap-1">
                   <Label className="text-sm font-medium text-muted-foreground">Order Type</Label>
                   <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
-                    <SelectTrigger className="bg-muted/30">
-                      <SelectValue className='flex gap-4' />
+                    <SelectTrigger className="bg-muted/30 h-[50px]">
+                      <SelectValue className='flex space-x-4' />
                     </SelectTrigger>
-                    <SelectContent className='bg-white'>
+                    <SelectContent className='bg-white dark:bg-black'>
                       <SelectItem value="limit">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-4">
                           <Target className="w-4 h-4" />
                           <div>
                             <div className="font-medium text-left">Limit Order</div>
@@ -433,7 +441,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                         </div>
                       </SelectItem>
                       <SelectItem value="twap">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-4">
                           <TrendingUp className="w-4 h-4" />
                           <div>
                             <div className="font-medium">TWAP Order</div>
@@ -442,7 +450,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                         </div>
                       </SelectItem>
                       <SelectItem value="stop">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-4">
                           <AlertCircle className="w-4 h-4" />
                           <div>
                             <div className="font-medium">Stop Loss</div>
@@ -475,7 +483,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                     placeholder="0.0"
                     value={makerAmount}
                     onChange={(e) => setMakerAmount(e.target.value)}
-                    className="text-lg h-12 text-right bg-muted/30 border-muted"
+                    className="text-xl h-12 text-right bg-muted/30 border-muted [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     step="any"
                   />
                 </div>
@@ -501,7 +509,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                     placeholder="0.0"
                     value={takerAmount}
                     onChange={(e) => setTakerAmount(e.target.value)}
-                    className="text-lg h-12 text-right bg-muted/30 border-muted"
+                    className="text-xl h-12 text-right bg-muted/30 border-muted [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     step="any"
                   />
                 </div>
@@ -510,10 +518,10 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
                 <div className="space-y-3">
                   <Label className="text-sm font-medium text-muted-foreground">Expiration</Label>
                   <Select value={expiration} onValueChange={setExpiration}>
-                    <SelectTrigger className="h-12 bg-muted/30">
+                    <SelectTrigger className="h-12 bg-black dark:bg-black text-white dark:text-white">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className='bg-white dark:bg-black text-black dark:text-white'>
                       <SelectItem value="3600">
                         <div className="flex items-center space-x-2">
                           <Clock className="w-4 h-4" />

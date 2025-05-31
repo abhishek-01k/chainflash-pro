@@ -64,12 +64,12 @@ export function StateChannelManager() {
   const handleCreateChannel = async () => {
     try {
       setIsLoading(true);
-      
+
       const depositAmount = BigInt(Math.floor(parseFloat(createForm.initialDeposit) * Math.pow(10, 18))); // Convert to wei
       const userAllocationPercent = BigInt(createForm.initialAllocation);
       const userAllocation = (userAllocationPercent * depositAmount) / BigInt(100);
       const counterpartyAllocation = depositAmount - userAllocation;
-      
+
       // First, deposit and create channel
       const result = await nitroliteService.depositAndCreateChannel(
         depositAmount,
@@ -109,7 +109,7 @@ export function StateChannelManager() {
       setIsLoading(true);
       const depositAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, 18)));
       const txHash = await nitroliteService.deposit(depositAmount);
-      
+
       toast({
         title: "Success",
         description: `Deposit successful! TX: ${txHash.slice(0, 10)}...`,
@@ -129,7 +129,7 @@ export function StateChannelManager() {
   const handleCloseChannel = async (channelId: string) => {
     try {
       setIsLoading(true);
-      
+
       // In production, this would involve getting signatures from all participants
       const finalState = {
         // Final state would be constructed based on current channel state
@@ -137,9 +137,9 @@ export function StateChannelManager() {
         isFinal: true,
         allocations: [], // Would be filled with actual final allocations
       };
-      
+
       const txHash = await nitroliteService.closeChannel(channelId, finalState);
-      
+
       toast({
         title: "Success",
         description: `Channel closed successfully! TX: ${txHash.slice(0, 10)}...`,
@@ -190,10 +190,10 @@ export function StateChannelManager() {
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs defaultValue="channels" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="channels">Channels</TabsTrigger>
-            <TabsTrigger value="create">Create</TabsTrigger>
-            <TabsTrigger value="deposit">Deposit</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 bg-muted dark:bg-muted/50">
+            <TabsTrigger value="channels" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Channels</TabsTrigger>
+            <TabsTrigger value="create" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Create</TabsTrigger>
+            <TabsTrigger value="deposit" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Deposit</TabsTrigger>
           </TabsList>
 
           <TabsContent value="channels" className="space-y-3">
@@ -220,7 +220,7 @@ export function StateChannelManager() {
                         {channel.status}
                       </Badge>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <Label className="text-xs text-muted-foreground">Balance</Label>
@@ -253,9 +253,9 @@ export function StateChannelManager() {
                     )}
 
                     <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
+                      <Button
+                        size="sm"
+                        variant="outline"
                         className="flex-1"
                         onClick={() => setSelectedChannel(channel.channelId)}
                       >
@@ -263,9 +263,9 @@ export function StateChannelManager() {
                         Trade
                       </Button>
                       {channel.status === 'open' && (
-                        <Button 
-                          size="sm" 
-                          variant="destructive" 
+                        <Button
+                          size="sm"
+                          variant="destructive"
                           onClick={() => handleCloseChannel(channel.channelId)}
                           disabled={isLoading}
                         >
@@ -292,7 +292,7 @@ export function StateChannelManager() {
                   onChange={(e) => setCreateForm(prev => ({ ...prev, initialDeposit: e.target.value }))}
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="counterparty">Counterparty Address</Label>
                 <Input
@@ -302,7 +302,7 @@ export function StateChannelManager() {
                   onChange={(e) => setCreateForm(prev => ({ ...prev, counterpartyAddress: e.target.value }))}
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="allocation">Your Allocation (%)</Label>
                 <Input
@@ -315,7 +315,7 @@ export function StateChannelManager() {
                 />
               </div>
 
-              <Button 
+              <Button
                 onClick={handleCreateChannel}
                 disabled={isLoading || !createForm.initialDeposit || !createForm.counterpartyAddress}
                 className="w-full"
@@ -337,8 +337,8 @@ export function StateChannelManager() {
                   placeholder="1.0"
                 />
               </div>
-              
-              <Button 
+
+              <Button
                 onClick={() => {
                   const input = document.getElementById('depositAmount') as HTMLInputElement;
                   if (input.value) {

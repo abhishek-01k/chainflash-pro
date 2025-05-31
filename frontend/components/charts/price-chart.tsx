@@ -41,8 +41,6 @@ const formatPrice = (price: number) => {
 };
 
 export function PriceChart({ data, fromToken = 'ETH', toToken = 'USD' }: PriceChartProps) {
-  console.log("Data", data);
-
   // Add validation for data
   if (!data?.data || data.data.length === 0) {
     return (
