@@ -16,42 +16,9 @@ import { nitroliteService } from '@/lib/services/nitrolite';
 import { useToast } from '@/hooks/use-toast';
 
 import type { Token, OneInchQuote } from '@/types';
-
-// Real token data - would be fetched from 1inch token list API in production
-const PRODUCTION_TOKENS: Token[] = [
-  {
-    symbol: 'ETH',
-    name: 'Ethereum',
-    address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-    decimals: 18,
-    chainId: 1,
-    logoURI: 'https://tokens.1inch.io/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png',
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    address: '0xA0b86a33E6441E61B9EB5b12b7a13af46b95dE74',
-    decimals: 6,
-    chainId: 1,
-    logoURI: 'https://tokens.1inch.io/0xa0b86a33e6441e61b9eb5b12b7a13af46b95de74.png',
-  },
-  {
-    symbol: 'USDT',
-    name: 'Tether USD',
-    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    decimals: 6,
-    chainId: 1,
-    logoURI: 'https://tokens.1inch.io/0xdac17f958d2ee523a2206206994597c13d831ec7.png',
-  },
-  {
-    symbol: 'WBTC',
-    name: 'Wrapped Bitcoin',
-    address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-    decimals: 8,
-    chainId: 1,
-    logoURI: 'https://tokens.1inch.io/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.png',
-  },
-];
+import { BASE_TOKENS } from '@/config/tokens';
+import Image from 'next/image';
+import { useAccount } from 'wagmi';
 
 interface TradingFormData {
   fromToken: Token;
@@ -70,8 +37,8 @@ interface TradingFormData {
 
 export function TradingInterface() {
   const [formData, setFormData] = useState<TradingFormData>({
-    fromToken: PRODUCTION_TOKENS[0],
-    toToken: PRODUCTION_TOKENS[1],
+    fromToken: BASE_TOKENS[0],
+    toToken: BASE_TOKENS[1],
     fromAmount: '',
     slippage: 0.5,
     useStateChannel: true,
@@ -83,6 +50,8 @@ export function TradingInterface() {
   const [error, setError] = useState<string | null>(null);
   const [activeChannels, setActiveChannels] = useState(0);
   const { toast } = useToast();
+
+  const { address, isConnected } = useAccount();
 
   // Load active channels count
   useEffect(() => {
@@ -104,20 +73,28 @@ export function TradingInterface() {
       return;
     }
 
+    if (!address) {
+      setError('Connect your wallet');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       const fromAmountWei = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
-      
+
       const quoteData = await oneInchService.getQuote({
-        chainId: 1, // Ethereum mainnet
+        chainId: 8453,
         src: formData.fromToken.address,
         dst: formData.toToken.address,
         amount: fromAmountWei,
         includeTokensInfo: true,
         includeProtocols: true,
+        walletAddress: address
       });
+
+      console.log("Quote data", quoteData);
 
       setQuote(quoteData);
     } catch (err) {
@@ -135,6 +112,11 @@ export function TradingInterface() {
 
   // Execute trade with real APIs
   const handleExecuteTrade = async () => {
+    if (!address) {
+      setError('Connect your wallet')
+      return
+    }
+
     if (!quote) return;
 
     setIsLoading(true);
@@ -142,11 +124,11 @@ export function TradingInterface() {
 
     try {
       const fromAmountWei = BigInt(Math.floor(parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)));
-      
+
       if (formData.useStateChannel && activeChannels > 0) {
         // Execute via Nitrolite state channel (instant, gas-free)
         const channelId = 'active-channel-id'; // Would get from active channels
-        
+
         const tradeResult = await nitroliteService.executeInstantTrade(
           channelId,
           formData.fromToken.address,
@@ -159,18 +141,17 @@ export function TradingInterface() {
           title: "Instant Trade Executed",
           description: `Trade executed instantly via state channel! Trade ID: ${tradeResult.id.slice(0, 10)}...`,
         });
-        
+
         console.log('State channel trade result:', tradeResult);
       } else {
         // Execute via 1inch regular swap
-        const mockUserAddress = '0x1234567890123456789012345678901234567890';
-        
+
         const swapResult = await oneInchService.getSwap({
-          chainId: 1,
+          chainId: 8453,
           src: formData.fromToken.address,
           dst: formData.toToken.address,
           amount: (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString(),
-          from: mockUserAddress,
+          from: address,
           slippage: formData.slippage,
         });
 
@@ -212,7 +193,7 @@ export function TradingInterface() {
       const takingAmount = (parseFloat(formData.limitPrice) * parseFloat(formData.fromAmount) * Math.pow(10, formData.toToken.decimals)).toString();
 
       const limitOrder = await oneInchService.createLimitOrder({
-        chainId: 1,
+        chainId: 8453,
         makerAsset: formData.fromToken.address,
         takerAsset: formData.toToken.address,
         makingAmount,
@@ -348,7 +329,7 @@ export function TradingInterface() {
   }, [formData.fromAmount, formData.fromToken, formData.toToken, formData.orderType]);
 
   return (
-    <Card className="w-full">
+    <Card className="max-w-[500px] mx-auto mt-12">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5" />
@@ -359,8 +340,8 @@ export function TradingInterface() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs 
-          value={formData.orderType} 
+        <Tabs
+          value={formData.orderType}
           onValueChange={(value) => setFormData({
             ...formData,
             orderType: value as any
@@ -399,16 +380,21 @@ export function TradingInterface() {
                   <Select
                     value={formData.fromToken.address}
                     onValueChange={(address) => {
-                      const token = PRODUCTION_TOKENS.find(t => t.address === address);
+                      const token = BASE_TOKENS.find(t => t.address === address);
                       if (token) setFormData({ ...formData, fromToken: token });
                     }}
                   >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="flex-1">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      {PRODUCTION_TOKENS.map((token) => (
-                        <SelectItem key={token.address} value={token.address}>
+                    <SelectContent className='bg-gray-800 text-white' >
+                      {BASE_TOKENS.map((token) => (
+                        <SelectItem
+                          className='py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer'
+                          key={token.address}
+                          value={token.address}
+                        >
+                          <Image src={token.logoURI} width={20} height={20} alt={token.name} />
                           {token.symbol}
                         </SelectItem>
                       ))}
@@ -416,6 +402,7 @@ export function TradingInterface() {
                   </Select>
                   <Input
                     type="number"
+                    className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
                     placeholder="0.0"
                     value={formData.fromAmount}
                     onChange={(e) =>
@@ -444,17 +431,30 @@ export function TradingInterface() {
                   <Select
                     value={formData.toToken.address}
                     onValueChange={(address) => {
-                      const token = PRODUCTION_TOKENS.find(t => t.address === address);
+                      const token = BASE_TOKENS.find(t => t.address === address);
                       if (token) setFormData({ ...formData, toToken: token });
                     }}
                   >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="flex-1 h-12">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      {PRODUCTION_TOKENS.map((token) => (
-                        <SelectItem key={token.address} value={token.address}>
-                          {token.symbol}
+                    <SelectContent className='bg-gray-800 text-white' >
+                      {BASE_TOKENS.map((token) => (
+                        <SelectItem
+                          key={token.address}
+                          value={token.address}
+                          className="flex items-center gap-2 focus:bg-accent focus:text-accent-foreground py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Image
+                              src={token.logoURI}
+                              width={24}
+                              height={24}
+                              alt={token.name}
+                              className="rounded-full"
+                            />
+                            <span>{token.symbol}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -462,9 +462,9 @@ export function TradingInterface() {
                   <Input
                     type="text"
                     placeholder="0.0"
-                    value={quote ? (Number(quote.toTokenAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
+                    value={quote ? (Number(quote.dstAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
                     readOnly
-                    className="bg-muted/50"
+                    className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
                   />
                 </div>
               </div>
@@ -472,16 +472,6 @@ export function TradingInterface() {
               {/* Quote Display */}
               {quote && (
                 <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Rate:</span>
-                    <span>
-                      1 {formData.fromToken.symbol} = {(Number(quote.toTokenAmount) / Number(quote.fromTokenAmount) * Math.pow(10, formData.fromToken.decimals - formData.toToken.decimals)).toFixed(6)} {formData.toToken.symbol}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Est. Gas:</span>
-                    <span>{Number(quote.estimatedGas).toLocaleString()}</span>
-                  </div>
                   <div className="flex justify-between text-sm">
                     <span>Slippage:</span>
                     <span>{formData.slippage}%</span>

@@ -1,9 +1,9 @@
 import { ethers } from 'ethers';
-import type { 
-  OneInchQuote, 
-  OneInchSwap, 
-  FusionOrder, 
-  LimitOrder, 
+import type {
+  OneInchQuote,
+  OneInchSwap,
+  FusionOrder,
+  LimitOrder,
   Token,
   TWAPOrder,
   OptionsOrder,
@@ -13,8 +13,9 @@ import type {
 import { FusionSDK, NetworkEnum } from '@1inch/fusion-sdk';
 
 // Real 1inch API configuration
-const ONEINCH_API_URL = 'https://api.1inch.dev';
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 const ONEINCH_API_KEY = process.env.NEXT_PUBLIC_ONEINCH_API_KEY;
+const ONEINCH_API_URL = 'https://api.1inch.dev';
 
 // Initialize Fusion SDK with real network
 const fusionSDK = new FusionSDK({
@@ -75,7 +76,8 @@ class OneInchService {
   // Generic API request method
   private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
     try {
-      const response = await fetch(`${ONEINCH_API_URL}${endpoint}`, {
+      // const response = await fetch(`${BACKEND_API_URL}/api/1inch${endpoint}`, {
+      const response = await fetch(`/api/1inch${endpoint}`, {
         ...options,
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
@@ -116,7 +118,7 @@ class OneInchService {
       });
 
       const response = await fetch(
-        `${ONEINCH_API_URL}/swap/v6.0/1/quote?${params}`,
+        `${BACKEND_API_URL}/api/1inch/swap/v6.0/1/quote?${params}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -130,7 +132,7 @@ class OneInchService {
       }
 
       const data = await response.json();
-      
+
       return {
         fromToken: data.fromToken.address,
         toToken: data.toToken.address,
@@ -168,7 +170,7 @@ class OneInchService {
       // Create order using Fusion SDK
       const quote = await fusionSDK.getQuote(orderParams);
       const order = await fusionSDK.createOrder(orderParams);
-      
+
       return {
         orderHash: (order as any).hash || ethers.randomBytes(32).toString(),
         status: 'pending',
@@ -202,7 +204,7 @@ class OneInchService {
     try {
       const addresses = tokenAddresses.join(',');
       const response = await fetch(
-        `${ONEINCH_API_URL}/price/v1.1/1/${addresses}`,
+        `${BACKEND_API_URL}/api/1inch/price/v1.1/1/${addresses}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -216,7 +218,7 @@ class OneInchService {
       }
 
       const data = await response.json();
-      
+
       // Transform the response to include 24h change and volume
       const priceData: PriceData = {};
       Object.entries(data).forEach(([address, price]) => {
@@ -238,7 +240,7 @@ class OneInchService {
   async getWalletBalances(walletAddress: string, chainId: number = 1): Promise<any> {
     try {
       const response = await fetch(
-        `${ONEINCH_API_URL}/balance/v1.2/${chainId}/${walletAddress}`,
+        `${BACKEND_API_URL}/api/1inch/balance/v1.2/${chainId}/${walletAddress}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -262,7 +264,7 @@ class OneInchService {
   async getOrderHistory(walletAddress: string, limit: number = 50): Promise<FusionOrderResponse[]> {
     try {
       const response = await fetch(
-        `${ONEINCH_API_URL}/orderbook/v4.0/1/order/history/${walletAddress}?limit=${limit}`,
+        `${BACKEND_API_URL}/api/1inch/orderbook/v4.0/1/order/history/${walletAddress}?limit=${limit}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
@@ -276,7 +278,7 @@ class OneInchService {
       }
 
       const data = await response.json();
-      
+
       return data.orders?.map((order: any) => ({
         orderHash: order.orderHash,
         status: order.status,
@@ -315,7 +317,7 @@ class OneInchService {
 
       // This would be replaced with actual bridge API call
       console.log('Creating Bitcoin-Ethereum atomic swap:', swapParams);
-      
+
       return {
         swapId: this.generateSwapId(),
         status: 'pending',
@@ -353,16 +355,9 @@ class OneInchService {
     amount: string;
     includeTokensInfo?: boolean;
     includeProtocols?: boolean;
+    walletAddress: string;
   }): Promise<OneInchQuote> {
-    const queryParams = new URLSearchParams({
-      src: params.src,
-      dst: params.dst,
-      amount: params.amount,
-      includeTokensInfo: params.includeTokensInfo?.toString() || 'true',
-      includeProtocols: params.includeProtocols?.toString() || 'true',
-    });
-
-    return this.makeRequest(`/swap/v6.0/${params.chainId}/quote?${queryParams}`);
+    return this.makeRequest(`/quote?src=${params.src}&dst=${params.dst}&amount=${params.amount}&walletAddress=${params.walletAddress}`)
   }
 
   /**
@@ -378,17 +373,8 @@ class OneInchService {
     includeTokensInfo?: boolean;
     includeProtocols?: boolean;
   }): Promise<OneInchSwap> {
-    const queryParams = new URLSearchParams({
-      src: params.src,
-      dst: params.dst,
-      amount: params.amount,
-      from: params.from,
-      slippage: params.slippage.toString(),
-      includeTokensInfo: params.includeTokensInfo?.toString() || 'true',
-      includeProtocols: params.includeProtocols?.toString() || 'true',
-    });
-
-    return this.makeRequest(`/swap/v6.0/${params.chainId}/swap?${queryParams}`);
+    return this.makeRequest(`/swap?src=${params.src}&dst=${params.dst}&amount=${params.amount}&from=${params.from}&slippage=${params.slippage}`)
+    // return this.makeRequest(`/swap/v6.0/${params.chainId}/swap?${queryParams}`);
   }
 
   /**
@@ -418,7 +404,7 @@ class OneInchService {
     // Generate hashlock for atomic swap
     const secret = ethers.randomBytes(32);
     const hashlock = ethers.keccak256(secret);
-    
+
     // Create escrow addresses for both chains
     const escrowAddress = await this.createEscrowContract(params.fromChain, {
       hashlock,
@@ -429,15 +415,15 @@ class OneInchService {
 
     const crossChainSwap: CrossChainSwap = {
       id: ethers.randomBytes(32).toString(),
-      fromChain: { 
-        id: typeof params.fromChain === 'number' ? params.fromChain : 0, 
+      fromChain: {
+        id: typeof params.fromChain === 'number' ? params.fromChain : 0,
         name: typeof params.fromChain === 'string' ? 'Bitcoin' : 'Ethereum',
         nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
         rpcUrls: ['https://mainnet.infura.io'],
         blockExplorerUrls: ['https://etherscan.io']
       },
-      toChain: { 
-        id: typeof params.toChain === 'number' ? params.toChain : 0, 
+      toChain: {
+        id: typeof params.toChain === 'number' ? params.toChain : 0,
         name: typeof params.toChain === 'string' ? 'Bitcoin' : 'Ethereum',
         nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
         rpcUrls: ['https://mainnet.infura.io'],
@@ -536,7 +522,7 @@ class OneInchService {
     predicate?: string;
   }): Promise<LimitOrder> {
     const salt = ethers.randomBytes(32).toString();
-    
+
     const order: LimitOrder = {
       salt,
       maker: params.maker,
@@ -550,9 +536,12 @@ class OneInchService {
       interaction: '0x',
     };
 
-    return this.makeRequest(`/orderbook/v4.0/${params.chainId}/order`, {
+    return this.makeRequest(`/orderbook`, {
       method: 'POST',
-      body: JSON.stringify(order),
+      body: JSON.stringify({
+        chainId: params.chainId,
+        ...order
+      }),
     });
   }
 

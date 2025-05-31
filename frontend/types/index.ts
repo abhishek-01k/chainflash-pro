@@ -28,6 +28,8 @@ export interface OneInchQuote {
   toTokenAmount: string;
   protocols: any[];
   estimatedGas: string;
+  walletAddress: string;
+  dstAmount: string;
 }
 
 export interface OneInchSwap extends OneInchQuote {

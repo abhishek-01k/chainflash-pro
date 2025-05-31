@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { mainnet, arbitrum, optimism, polygon, sepolia, arbitrumSepolia } from 'wagmi/chains';
+import { mainnet, arbitrum, optimism, polygon, sepolia, arbitrumSepolia, base } from 'wagmi/chains';
 import { http } from 'viem';
 
 // Environment variables with fallbacks
@@ -55,10 +55,17 @@ const chains = [
       public: { http: ['https://arbitrum-sepolia.publicnode.com'] },
     },
   },
+  {
+    ...base,
+    rpcUrls: {
+      default: { http: [`https://base-mainnet.g.alchemy.com/v2/${alchemyApiKey}`] },
+      public: { http: ['https://base.llamarpc.com'] },
+    },
+  },
 ] as const;
 
 // Wagmi configuration
-export const config = getDefaultConfig({
+export const wagmiConfig = getDefaultConfig({
   appName: 'ChainFlash Pro',
   projectId: walletConnectProjectId,
   chains,
