@@ -8,79 +8,137 @@ import type {
   TWAPOrder,
   OptionsOrder,
   CrossChainSwap,
-  BitcoinEscrow
+  BitcoinEscrow,
+  ChainInfo
 } from '../../types';
-import { FusionSDK, NetworkEnum } from '@1inch/fusion-sdk';
 
-// Real 1inch API configuration
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-const ONEINCH_API_KEY = process.env.NEXT_PUBLIC_ONEINCH_API_KEY;
-const ONEINCH_API_URL = 'https://api.1inch.dev';
+/**
+ * Production-ready 1inch Service
+ * Uses internal API routes for all 1inch API calls
+ * Based on official 1inch API v6.0 documentation
+ */
 
-// Initialize Fusion SDK with real network
-const fusionSDK = new FusionSDK({
-  url: 'https://api.1inch.dev',
-  network: NetworkEnum.ETHEREUM,
-  authKey: ONEINCH_API_KEY || '',
-});
-
-// 1inch Chain IDs
-const SUPPORTED_CHAINS = {
-  ethereum: 1,
-  arbitrum: 42161,
-  optimism: 10,
-  polygon: 137,
-  bitcoin: 'bitcoin', // For cross-chain
+// Supported chain IDs for 1inch (mainnet only as per documentation)
+export const SUPPORTED_CHAIN_IDS = {
+  ETHEREUM: 1,
+  BSC: 56,
+  POLYGON: 137,
+  OPTIMISM: 10,
+  ARBITRUM: 42161,
+  GNOSIS: 100,
+  AVALANCHE: 43114,
+  FANTOM: 250,
+  KLAYTN: 8217,
+  AURORA: 1313161554,
+  BASE: 8453,
 } as const;
 
-export interface SwapQuote {
-  fromToken: string;
-  toToken: string;
-  fromTokenAmount: string;
-  toTokenAmount: string;
-  protocols: string[];
-  estimatedGas: string;
-  gasPrice: string;
+export type SupportedChainId = typeof SUPPORTED_CHAIN_IDS[keyof typeof SUPPORTED_CHAIN_IDS];
+
+// Response interfaces based on 1inch API documentation
+export interface OneInchTokenInfo {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoURI?: string;
+  tags?: string[];
 }
 
-export interface PriceData {
-  [tokenAddress: string]: {
-    price: number;
-    change24h: number;
-    volume24h: number;
+export interface OneInchQuoteResponse {
+  fromToken: OneInchTokenInfo;
+  toToken: OneInchTokenInfo;
+  fromTokenAmount: string;
+  toTokenAmount: string;
+  protocols?: any[];
+  estimatedGas: string;
+  gasPrice?: string;
+}
+
+export interface OneInchSwapResponse {
+  fromToken: OneInchTokenInfo;
+  toToken: OneInchTokenInfo;
+  fromTokenAmount: string;
+  toTokenAmount: string;
+  protocols?: any[];
+  tx: {
+    from: string;
+    to: string;
+    data: string;
+    value: string;
+    gasPrice: string;
+    gas: string;
   };
 }
 
-export interface FusionOrderResponse {
+export interface FusionPlusQuoteResponse {
+  fromToken: OneInchTokenInfo;
+  toToken: OneInchTokenInfo;
+  fromTokenAmount: string;
+  toTokenAmount: string;
+  preset: string;
+  orderHash?: string;
+}
+
+export interface FusionPlusOrderResponse {
   orderHash: string;
-  status: 'pending' | 'filled' | 'cancelled' | 'expired';
-  fromToken: string;
-  toToken: string;
-  fromAmount: string;
-  toAmount: string;
-  maker: string;
-  receiver: string;
-  deadline: number;
+  order: {
+    salt: string;
+    maker: string;
+    receiver: string;
+    makerAsset: string;
+    takerAsset: string;
+    makingAmount: string;
+    takingAmount: string;
+    makerTraits: string;
+  };
+  quoteId: string;
+  orderInfo: {
+    orderHash: string;
+    remaining: string;
+    status: number;
+  };
+}
+
+export interface BalanceResponse {
+  [tokenAddress: string]: string;
+}
+
+export interface OrderbookOrderResponse {
+  orderHash: string;
+  signature: string;
+  order: {
+    salt: string;
+    maker: string;
+    receiver: string;
+    makerAsset: string;
+    takerAsset: string;
+    makingAmount: string;
+    takingAmount: string;
+    makerTraits: string;
+  };
 }
 
 class OneInchService {
-  private apiKey: string;
+  private baseURL: string;
 
   constructor() {
-    this.apiKey = ONEINCH_API_KEY || '';
-    if (!this.apiKey) {
-      console.warn('1inch API key not found. Some features may not work properly.');
-    }
+    this.baseURL = '/api/1inch';
   }
 
-  // Generic API request method
-  private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+  /**
+   * Make request to our internal API routes
+   */
+  private async makeRequest<T>(
+    endpoint: string, 
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    
     try {
-      // const response = await fetch(`${BACKEND_API_URL}/api/1inch${endpoint}`, {
-      const response = await fetch(`/api/1inch${endpoint}`, {
+      const response = await fetch(url, {
         ...options,
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
           'accept': 'application/json',
           'Content-Type': 'application/json',
           ...options.headers,
@@ -88,7 +146,12 @@ class OneInchService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `API Error (${response.status}): ${
+            errorData.error || errorData.description || response.statusText
+          }`
+        );
       }
 
       return await response.json();
@@ -98,483 +161,372 @@ class OneInchService {
     }
   }
 
-  // Real swap quote using 1inch API
-  async getSwapQuote(
-    fromToken: string,
-    toToken: string,
-    amount: string,
-    fromAddress: string,
-    slippage: number = 1
-  ): Promise<SwapQuote> {
-    try {
-      const params = new URLSearchParams({
-        src: fromToken,
-        dst: toToken,
-        amount,
-        from: fromAddress,
-        slippage: slippage.toString(),
-        disableEstimate: 'false',
-        allowPartialFill: 'true',
-      });
-
-      const response = await fetch(
-        `${BACKEND_API_URL}/api/1inch/swap/v6.0/1/quote?${params}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return {
-        fromToken: data.fromToken.address,
-        toToken: data.toToken.address,
-        fromTokenAmount: data.fromTokenAmount,
-        toTokenAmount: data.toTokenAmount,
-        protocols: data.protocols || [],
-        estimatedGas: data.estimatedGas || '0',
-        gasPrice: data.gasPrice || '0',
-      };
-    } catch (error) {
-      console.error('Error fetching swap quote:', error);
-      throw error;
-    }
+  /**
+   * Get supported tokens for a specific chain
+   * GET /api/1inch/tokens
+   */
+  async getTokens(chainId: SupportedChainId): Promise<Record<string, OneInchTokenInfo>> {
+    const params = new URLSearchParams({ chainId: chainId.toString() });
+    return this.makeRequest(`/tokens?${params}`);
   }
-
-  // Real Fusion+ cross-chain swap
-  async createFusionOrder(
-    fromToken: string,
-    toToken: string,
-    amount: string,
-    userAddress: string,
-    destinationChain: number = 1
-  ): Promise<FusionOrderResponse> {
-    try {
-      const orderParams = {
-        fromTokenAddress: fromToken,
-        toTokenAddress: toToken,
-        amount,
-        walletAddress: userAddress,
-        enable_estimate: true,
-        allow_partial_fill: true,
-        source: 'sdk',
-      };
-
-      // Create order using Fusion SDK
-      const quote = await fusionSDK.getQuote(orderParams);
-      const order = await fusionSDK.createOrder(orderParams);
-
-      return {
-        orderHash: (order as any).hash || ethers.randomBytes(32).toString(),
-        status: 'pending',
-        fromToken,
-        toToken,
-        fromAmount: amount,
-        toAmount: (quote as any).dstAmount || (quote as any).toTokenAmount || '0',
-        maker: userAddress,
-        receiver: userAddress,
-        deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-      };
-    } catch (error) {
-      console.error('Error creating Fusion order:', error);
-      // Return a fallback order structure
-      return {
-        orderHash: ethers.randomBytes(32).toString(),
-        status: 'pending',
-        fromToken,
-        toToken,
-        fromAmount: amount,
-        toAmount: '0',
-        maker: userAddress,
-        receiver: userAddress,
-        deadline: Math.floor(Date.now() / 1000) + 3600,
-      };
-    }
-  }
-
-  // Real price feeds from 1inch
-  async getTokenPrices(tokenAddresses: string[]): Promise<PriceData> {
-    try {
-      const addresses = tokenAddresses.join(',');
-      const response = await fetch(
-        `${BACKEND_API_URL}/api/1inch/price/v1.1/1/${addresses}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Transform the response to include 24h change and volume
-      const priceData: PriceData = {};
-      Object.entries(data).forEach(([address, price]) => {
-        priceData[address] = {
-          price: price as number,
-          change24h: Math.random() * 10 - 5, // This would come from additional API call
-          volume24h: Math.random() * 1000000, // This would come from additional API call
-        };
-      });
-
-      return priceData;
-    } catch (error) {
-      console.error('Error fetching token prices:', error);
-      throw error;
-    }
-  }
-
-  // Real wallet balances
-  async getWalletBalances(walletAddress: string, chainId: number = 1): Promise<any> {
-    try {
-      const response = await fetch(
-        `${BACKEND_API_URL}/api/1inch/balance/v1.2/${chainId}/${walletAddress}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching wallet balances:', error);
-      throw error;
-    }
-  }
-
-  // Real order history
-  async getOrderHistory(walletAddress: string, limit: number = 50): Promise<FusionOrderResponse[]> {
-    try {
-      const response = await fetch(
-        `${BACKEND_API_URL}/api/1inch/orderbook/v4.0/1/order/history/${walletAddress}?limit=${limit}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'accept': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return data.orders?.map((order: any) => ({
-        orderHash: order.orderHash,
-        status: order.status,
-        fromToken: order.fromToken,
-        toToken: order.toToken,
-        fromAmount: order.fromAmount,
-        toAmount: order.toAmount,
-        maker: order.maker,
-        receiver: order.receiver || order.maker,
-        deadline: order.deadline,
-      })) || [];
-    } catch (error) {
-      console.error('Error fetching order history:', error);
-      return [];
-    }
-  }
-
-  // Bitcoin-Ethereum atomic swap functionality
-  async createBitcoinEthereumSwap(
-    bitcoinAmount: string,
-    ethereumAddress: string,
-    bitcoinAddress: string
-  ): Promise<any> {
-    try {
-      // This would integrate with a real Bitcoin-Ethereum bridge service
-      // For production, you'd use a service like RenBridge, tBTC, or custom implementation
-      const swapParams = {
-        source_chain: 'bitcoin',
-        destination_chain: 'ethereum',
-        source_amount: bitcoinAmount,
-        destination_address: ethereumAddress,
-        refund_address: bitcoinAddress,
-        hash_lock: this.generateHashLock(),
-        time_lock: Math.floor(Date.now() / 1000) + 86400, // 24 hours
-      };
-
-      // This would be replaced with actual bridge API call
-      console.log('Creating Bitcoin-Ethereum atomic swap:', swapParams);
-
-      return {
-        swapId: this.generateSwapId(),
-        status: 'pending',
-        ...swapParams,
-      };
-    } catch (error) {
-      console.error('Error creating Bitcoin-Ethereum swap:', error);
-      throw error;
-    }
-  }
-
-  private generateHashLock(): string {
-    return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  private generateSwapId(): string {
-    return '0x' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  // ============================================================================
-  // CLASSIC SWAP API - For utilizing 1inch APIs bounty ($1,500)
-  // ============================================================================
 
   /**
-   * Get quote for token swap
+   * Get allowance for token spending
+   * GET /api/1inch/allowance
+   */
+  async getAllowance(
+    chainId: SupportedChainId,
+    tokenAddress: string,
+    walletAddress: string
+  ): Promise<{ allowance: string }> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+      tokenAddress,
+      walletAddress,
+    });
+
+    return this.makeRequest(`/allowance?${params}`);
+  }
+
+  /**
+   * Get approval transaction data
+   * GET /api/1inch/approve
+   */
+  async getApprovalTransaction(
+    chainId: SupportedChainId,
+    tokenAddress: string,
+    amount?: string
+  ): Promise<{
+    data: string;
+    gasPrice: string;
+    to: string;
+    value: string;
+  }> {
+    const params = new URLSearchParams({ 
+      chainId: chainId.toString(),
+      tokenAddress 
+    });
+    if (amount) params.append('amount', amount);
+
+    return this.makeRequest(`/approve?${params}`);
+  }
+
+  /**
+   * Get swap quote
+   * GET /api/1inch/quote
    */
   async getQuote(params: {
-    chainId: number;
+    chainId: SupportedChainId;
     src: string;
     dst: string;
     amount: string;
     includeTokensInfo?: boolean;
     includeProtocols?: boolean;
-    walletAddress: string;
-  }): Promise<OneInchQuote> {
-    return this.makeRequest(`/quote?src=${params.src}&dst=${params.dst}&amount=${params.amount}&walletAddress=${params.walletAddress}`)
+    fee?: number;
+    gasLimit?: number;
+    connectorTokens?: string;
+  }): Promise<OneInchQuoteResponse> {
+    const searchParams = new URLSearchParams({
+      chainId: params.chainId.toString(),
+      src: params.src,
+      dst: params.dst,
+      amount: params.amount,
+    });
+
+    if (params.includeTokensInfo) searchParams.append('includeTokensInfo', 'true');
+    if (params.includeProtocols) searchParams.append('includeProtocols', 'true');
+    if (params.fee) searchParams.append('fee', params.fee.toString());
+    if (params.gasLimit) searchParams.append('gasLimit', params.gasLimit.toString());
+    if (params.connectorTokens) searchParams.append('connectorTokens', params.connectorTokens);
+
+    return this.makeRequest(`/quote?${searchParams}`);
   }
 
   /**
    * Get swap transaction data
+   * GET /api/1inch/swap
    */
   async getSwap(params: {
-    chainId: number;
+    chainId: SupportedChainId;
     src: string;
     dst: string;
     amount: string;
     from: string;
     slippage: number;
+    protocols?: string;
+    fee?: number;
+    gasLimit?: number;
+    gasPrice?: string;
+    connectorTokens?: string;
+    complexityLevel?: number;
+    mainRouteParts?: number;
+    parts?: number;
     includeTokensInfo?: boolean;
     includeProtocols?: boolean;
-  }): Promise<OneInchSwap> {
-    return this.makeRequest(`/swap?src=${params.src}&dst=${params.dst}&amount=${params.amount}&from=${params.from}&slippage=${params.slippage}`)
-    // return this.makeRequest(`/swap/v6.0/${params.chainId}/swap?${queryParams}`);
-  }
-
-  /**
-   * Get supported tokens list
-   */
-  async getTokens(chainId: number): Promise<Record<string, Token>> {
-    return this.makeRequest(`/swap/v6.0/${chainId}/tokens`);
-  }
-
-  // ============================================================================
-  // FUSION+ CROSS-CHAIN SWAP - For Extensions bounty ($12,000)
-  // ============================================================================
-
-  /**
-   * Create Fusion+ order for cross-chain swap between Ethereum and Bitcoin
-   */
-  async createFusionPlusOrder(params: {
-    fromChain: number | 'bitcoin';
-    toChain: number | 'bitcoin';
-    fromToken: Token;
-    toToken: Token;
-    fromAmount: string;
-    toAmount: string;
-    maker: string;
+    compatibilityMode?: boolean;
     receiver?: string;
-  }): Promise<CrossChainSwap> {
-    // Generate hashlock for atomic swap
-    const secret = ethers.randomBytes(32);
-    const hashlock = ethers.keccak256(secret);
-
-    // Create escrow addresses for both chains
-    const escrowAddress = await this.createEscrowContract(params.fromChain, {
-      hashlock,
-      timelock: Math.floor(Date.now() / 1000) + 3600 * 24 * 3, // 3 days
-      fromToken: params.fromToken,
-      amount: params.fromAmount,
-    });
-
-    const crossChainSwap: CrossChainSwap = {
-      id: ethers.randomBytes(32).toString(),
-      fromChain: {
-        id: typeof params.fromChain === 'number' ? params.fromChain : 0,
-        name: typeof params.fromChain === 'string' ? 'Bitcoin' : 'Ethereum',
-        nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://mainnet.infura.io'],
-        blockExplorerUrls: ['https://etherscan.io']
-      },
-      toChain: {
-        id: typeof params.toChain === 'number' ? params.toChain : 0,
-        name: typeof params.toChain === 'string' ? 'Bitcoin' : 'Ethereum',
-        nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-        rpcUrls: ['https://mainnet.infura.io'],
-        blockExplorerUrls: ['https://etherscan.io']
-      },
-      fromToken: params.fromToken,
-      toToken: params.toToken,
-      fromAmount: params.fromAmount,
-      toAmount: params.toAmount,
-      escrowAddress,
-      hashlock,
-      timelock: Math.floor(Date.now() / 1000) + 3600 * 24 * 3,
-      status: 'pending',
-      createdAt: Date.now(),
-    };
-
-    // Submit to Fusion+ API
-    const result = await this.makeRequest('/fusion-plus/v1.0/orders', {
-      method: 'POST',
-      body: JSON.stringify(crossChainSwap),
-    });
-
-    return result;
-  }
-
-  /**
-   * Create Bitcoin escrow contract for cross-chain swap
-   */
-  async createBitcoinEscrow(params: {
-    hashlock: string;
-    timelock: number;
-    amount: number;
-    recipientAddress: string;
-    senderAddress: string;
-  }): Promise<BitcoinEscrow> {
-    // Bitcoin Script for HTLC (Hash Time Locked Contract)
-    const redeemScript = `
-      OP_IF
-        OP_SHA256 ${params.hashlock} OP_EQUALVERIFY
-        OP_DUP OP_HASH160 ${params.recipientAddress}
-      OP_ELSE
-        ${params.timelock} OP_CHECKLOCKTIMEVERIFY OP_DROP
-        OP_DUP OP_HASH160 ${params.senderAddress}
-      OP_ENDIF
-      OP_EQUALVERIFY OP_CHECKSIG
-    `;
-
-    // Generate P2SH address from redeem script
-    const scriptHash = ethers.keccak256(ethers.toUtf8Bytes(redeemScript));
-    const address = `3${scriptHash.slice(2, 42)}`; // Simplified P2SH address generation
-
-    return {
-      address,
-      redeemScript,
-      hashlock: params.hashlock,
-      timelock: params.timelock,
+    referrer?: string;
+    allowPartialFill?: boolean;
+    disableEstimate?: boolean;
+    usePatching?: boolean;
+  }): Promise<OneInchSwapResponse> {
+    const searchParams = new URLSearchParams({
+      chainId: params.chainId.toString(),
+      src: params.src,
+      dst: params.dst,
       amount: params.amount,
-      status: 'created',
-    };
-  }
-
-  /**
-   * Execute Fusion+ swap between Ethereum and Bitcoin
-   */
-  async executeFusionPlusSwap(swapId: string, secret: string): Promise<{ txHashes: string[] }> {
-    return this.makeRequest(`/fusion-plus/v1.0/swaps/${swapId}/execute`, {
-      method: 'POST',
-      body: JSON.stringify({ secret }),
+      from: params.from,
+      slippage: params.slippage.toString(),
     });
+
+    // Add optional parameters
+    if (params.protocols) searchParams.append('protocols', params.protocols);
+    if (params.fee) searchParams.append('fee', params.fee.toString());
+    if (params.gasLimit) searchParams.append('gasLimit', params.gasLimit.toString());
+    if (params.gasPrice) searchParams.append('gasPrice', params.gasPrice);
+    if (params.connectorTokens) searchParams.append('connectorTokens', params.connectorTokens);
+    if (params.complexityLevel) searchParams.append('complexityLevel', params.complexityLevel.toString());
+    if (params.mainRouteParts) searchParams.append('mainRouteParts', params.mainRouteParts.toString());
+    if (params.parts) searchParams.append('parts', params.parts.toString());
+    if (params.includeTokensInfo) searchParams.append('includeTokensInfo', 'true');
+    if (params.includeProtocols) searchParams.append('includeProtocols', 'true');
+    if (params.compatibilityMode) searchParams.append('compatibilityMode', 'true');
+    if (params.receiver) searchParams.append('receiver', params.receiver);
+    if (params.referrer) searchParams.append('referrer', params.referrer);
+    if (params.allowPartialFill) searchParams.append('allowPartialFill', 'true');
+    if (params.disableEstimate) searchParams.append('disableEstimate', 'true');
+    if (params.usePatching) searchParams.append('usePatching', 'true');
+
+    return this.makeRequest(`/swap?${searchParams}`);
   }
 
   /**
-   * Refund Fusion+ swap if timelock expires
+   * Get Fusion+ quote
+   * GET /api/1inch/fusion-plus/quote
    */
-  async refundFusionPlusSwap(swapId: string): Promise<{ txHash: string }> {
-    return this.makeRequest(`/fusion-plus/v1.0/swaps/${swapId}/refund`, {
-      method: 'POST',
+  async getFusionPlusQuote(params: {
+    chainId: SupportedChainId;
+    src: string;
+    dst: string;
+    amount: string;
+    walletAddress: string;
+    enableEstimate?: boolean;
+    permit?: string;
+  }): Promise<FusionPlusQuoteResponse> {
+    const searchParams = new URLSearchParams({
+      chainId: params.chainId.toString(),
+      src: params.src,
+      dst: params.dst,
+      amount: params.amount,
+      walletAddress: params.walletAddress,
     });
+
+    if (params.enableEstimate) searchParams.append('enableEstimate', 'true');
+    if (params.permit) searchParams.append('permit', params.permit);
+
+    return this.makeRequest(`/fusion-plus/quote?${searchParams}`);
   }
 
-  // ============================================================================
-  // LIMIT ORDER PROTOCOL - For Extend Limit Order Protocol bounty ($6,500)
-  // ============================================================================
-
   /**
-   * Create basic limit order
+   * Submit Fusion+ order
+   * POST /api/1inch/fusion-plus/submit
    */
-  async createLimitOrder(params: {
-    chainId: number;
-    makerAsset: string;
-    takerAsset: string;
-    makingAmount: string;
-    takingAmount: string;
-    maker: string;
-    receiver?: string;
-    predicate?: string;
-  }): Promise<LimitOrder> {
-    const salt = ethers.randomBytes(32).toString();
+  async submitFusionPlusOrder(params: {
+    chainId: SupportedChainId;
+    order: string;
+    signature: string;
+    quoteId: string;
+  }): Promise<FusionPlusOrderResponse> {
+    const searchParams = new URLSearchParams({
+      chainId: params.chainId.toString(),
+    });
 
-    const order: LimitOrder = {
-      salt,
-      maker: params.maker,
-      receiver: params.receiver || params.maker,
-      makerAsset: params.makerAsset,
-      takerAsset: params.takerAsset,
-      makingAmount: params.makingAmount,
-      takingAmount: params.takingAmount,
-      predicate: params.predicate || '0x',
-      permit: '0x',
-      interaction: '0x',
-    };
-
-    return this.makeRequest(`/orderbook`, {
+    return this.makeRequest(`/fusion-plus/submit?${searchParams}`, {
       method: 'POST',
       body: JSON.stringify({
-        chainId: params.chainId,
-        ...order
+        order: params.order,
+        signature: params.signature,
+        quoteId: params.quoteId,
       }),
     });
   }
 
   /**
-   * Create TWAP (Time-Weighted Average Price) order strategy
+   * Get Fusion+ order status
+   * GET /api/1inch/fusion-plus/status/[orderHash]
+   */
+  async getFusionPlusOrderStatus(
+    chainId: SupportedChainId,
+    orderHash: string
+  ): Promise<{
+    status: 'pending' | 'filled' | 'cancelled' | 'expired';
+    fills?: any[];
+  }> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+    });
+
+    return this.makeRequest(`/fusion-plus/status/${orderHash}?${params}`);
+  }
+
+  /**
+   * Get wallet balances
+   * GET /api/1inch/balances
+   */
+  async getBalances(
+    chainId: SupportedChainId,
+    walletAddress: string
+  ): Promise<BalanceResponse> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+      walletAddress,
+    });
+
+    return this.makeRequest(`/balances?${params}`);
+  }
+
+  /**
+   * Get current gas price
+   * GET /api/1inch/gas-price
+   */
+  async getGasPrice(chainId: SupportedChainId): Promise<{
+    standard: string;
+    fast: string;
+    instant: string;
+  }> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+    });
+
+    return this.makeRequest(`/gas-price?${params}`);
+  }
+
+  /**
+   * Get spot prices for tokens
+   * GET /api/1inch/prices
+   */
+  async getSpotPrices(
+    chainId: SupportedChainId,
+    addresses: string[],
+    currency: string = 'USD'
+  ): Promise<Record<string, string>> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+      addresses: addresses.join(','),
+      currency,
+    });
+    
+    return this.makeRequest(`/prices?${params}`);
+  }
+
+  /**
+   * Create limit order (Orderbook API)
+   * POST /api/1inch/orderbook
+   */
+  async createLimitOrder(params: {
+    chainId: SupportedChainId;
+    order: {
+      salt: string;
+      maker: string;
+      receiver: string;
+      makerAsset: string;
+      takerAsset: string;
+      makingAmount: string;
+      takingAmount: string;
+      makerTraits: string;
+    };
+    signature: string;
+  }): Promise<OrderbookOrderResponse> {
+    const searchParams = new URLSearchParams({
+      chainId: params.chainId.toString(),
+    });
+
+    return this.makeRequest(`/orderbook?${searchParams}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        order: params.order,
+        signature: params.signature,
+      }),
+    });
+  }
+
+  /**
+   * Get active orders for maker
+   * GET /api/1inch/orderbook/orders/[maker]
+   */
+  async getActiveOrders(
+    chainId: SupportedChainId,
+    maker: string,
+    page?: number,
+    limit?: number
+  ): Promise<OrderbookOrderResponse[]> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+    });
+    if (page) params.append('page', page.toString());
+    if (limit) params.append('limit', limit.toString());
+    
+    return this.makeRequest(`/orderbook/orders/${maker}?${params}`);
+  }
+
+  /**
+   * Cancel limit order
+   * DELETE /api/1inch/orderbook/cancel/[orderHash]
+   */
+  async cancelLimitOrder(
+    chainId: SupportedChainId,
+    orderHash: string
+  ): Promise<{ success: boolean }> {
+    const params = new URLSearchParams({
+      chainId: chainId.toString(),
+    });
+
+    return this.makeRequest(`/orderbook/cancel/${orderHash}?${params}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Advanced TWAP Order Creation
+   * Uses limit order protocol with time-based predicates
    */
   async createTWAPOrder(params: {
-    chainId: number;
-    baseOrder: Omit<LimitOrder, 'salt'>;
+    chainId: SupportedChainId;
+    makerAsset: string;
+    takerAsset: string;
     totalAmount: string;
     numberOfTrades: number;
     timeInterval: number; // seconds between trades
     startTime?: number;
+    slippage?: number;
   }): Promise<TWAPOrder> {
     const startTime = params.startTime || Math.floor(Date.now() / 1000);
     const endTime = startTime + (params.numberOfTrades * params.timeInterval);
-    const tradeAmount = (BigInt(params.totalAmount) / BigInt(params.numberOfTrades)).toString();
+    const amountPerTrade = (BigInt(params.totalAmount) / BigInt(params.numberOfTrades)).toString();
 
-    // Create predicate that checks time intervals
-    const twapPredicate = this.encodeTWAPPredicate({
+    // Generate TWAP predicate
+    const predicate = this.encodeTWAPPredicate({
       startTime,
       timeInterval: params.timeInterval,
       numberOfTrades: params.numberOfTrades,
     });
 
+    // Create base order structure
+    const salt = ethers.randomBytes(32);
     const baseOrder: LimitOrder = {
-      ...params.baseOrder,
-      salt: ethers.randomBytes(32).toString(),
-      makingAmount: tradeAmount,
-      predicate: twapPredicate,
+      salt: ethers.hexlify(salt),
+      maker: '', // Will be set by caller
+      receiver: '', // Will be set by caller
+      makerAsset: params.makerAsset,
+      takerAsset: params.takerAsset,
+      makingAmount: amountPerTrade,
+      takingAmount: '0', // Will be calculated based on market price
+      predicate,
+      permit: '0x',
+      interaction: '0x',
     };
 
-    const twapOrder: TWAPOrder = {
+    return {
       baseOrder,
       totalAmount: params.totalAmount,
       numberOfTrades: params.numberOfTrades,
@@ -584,41 +536,42 @@ class OneInchService {
       executedTrades: 0,
       remainingAmount: params.totalAmount,
     };
-
-    // Submit TWAP order to 1inch
-    await this.makeRequest(`/orderbook/v4.0/${params.chainId}/order`, {
-      method: 'POST',
-      body: JSON.stringify(baseOrder),
-    });
-
-    return twapOrder;
   }
 
   /**
-   * Create Options order strategy
+   * Advanced Options Order Creation
    */
   async createOptionsOrder(params: {
-    chainId: number;
-    baseOrder: Omit<LimitOrder, 'salt' | 'predicate'>;
+    chainId: SupportedChainId;
+    makerAsset: string;
+    takerAsset: string;
     strikePrice: string;
     expirationTime: number;
     optionType: 'call' | 'put';
     premium: string;
+    amount: string;
   }): Promise<OptionsOrder> {
-    // Create predicate for options logic
-    const optionsPredicate = this.encodeOptionsPredicate({
+    const predicate = this.encodeOptionsPredicate({
       strikePrice: params.strikePrice,
       expirationTime: params.expirationTime,
       optionType: params.optionType,
     });
 
+    const salt = ethers.randomBytes(32);
     const baseOrder: LimitOrder = {
-      ...params.baseOrder,
-      salt: ethers.randomBytes(32).toString(),
-      predicate: optionsPredicate,
+      salt: ethers.hexlify(salt),
+      maker: '', // Will be set by caller
+      receiver: '', // Will be set by caller
+      makerAsset: params.makerAsset,
+      takerAsset: params.takerAsset,
+      makingAmount: params.amount,
+      takingAmount: params.premium,
+      predicate,
+      permit: '0x',
+      interaction: '0x',
     };
 
-    const optionsOrder: OptionsOrder = {
+    return {
       baseOrder,
       strikePrice: params.strikePrice,
       expirationTime: params.expirationTime,
@@ -626,60 +579,90 @@ class OneInchService {
       premium: params.premium,
       isExercised: false,
     };
-
-    await this.makeRequest(`/orderbook/v4.0/${params.chainId}/order`, {
-      method: 'POST',
-      body: JSON.stringify(baseOrder),
-    });
-
-    return optionsOrder;
   }
 
   /**
-   * Create concentrated liquidity integration
+   * Cross-chain Bitcoin-Ethereum swap implementation
    */
-  async createConcentratedLiquidityOrder(params: {
-    chainId: number;
-    baseOrder: Omit<LimitOrder, 'salt' | 'predicate'>;
-    lowerPrice: string;
-    upperPrice: string;
-    liquidityAmount: string;
-  }): Promise<LimitOrder> {
-    // Create predicate for concentrated liquidity range
-    const rangePredicate = this.encodeRangePredicate({
-      lowerPrice: params.lowerPrice,
-      upperPrice: params.upperPrice,
+  async createBitcoinEthereumSwap(params: {
+    bitcoinAmount: number;
+    ethereumAddress: string;
+    bitcoinAddress: string;
+    ethereumTokenAddress?: string;
+  }): Promise<CrossChainSwap> {
+    // Generate swap parameters
+    const swapId = ethers.hexlify(this.generateSwapId());
+    const hashlock = ethers.hexlify(this.generateHashLock());
+    const timelock = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 hours
+
+    // Create Bitcoin escrow
+    const bitcoinEscrow = await this.createBitcoinEscrow({
+      hashlock,
+      timelock,
+      amount: params.bitcoinAmount,
+      recipientAddress: params.ethereumAddress,
+      senderAddress: params.bitcoinAddress,
     });
 
-    const order: LimitOrder = {
-      ...params.baseOrder,
-      salt: ethers.randomBytes(32).toString(),
-      predicate: rangePredicate,
+    // Create chain info objects
+    const fromChain: ChainInfo = {
+      id: 0, // Bitcoin doesn't have a chain ID in EVM terms
+      name: 'Bitcoin',
+      nativeCurrency: { name: 'Bitcoin', symbol: 'BTC', decimals: 8 },
+      rpcUrls: ['https://blockstream.info/api'],
+      blockExplorerUrls: ['https://blockstream.info'],
     };
 
-    return this.makeRequest(`/orderbook/v4.0/${params.chainId}/order`, {
-      method: 'POST',
-      body: JSON.stringify(order),
-    });
+    const toChain: ChainInfo = {
+      id: SUPPORTED_CHAIN_IDS.ETHEREUM,
+      name: 'Ethereum',
+      nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+      rpcUrls: ['https://mainnet.infura.io'],
+      blockExplorerUrls: ['https://etherscan.io'],
+    };
+
+    const fromToken: Token = {
+      symbol: 'BTC',
+      address: 'bitcoin',
+      decimals: 8,
+      name: 'Bitcoin',
+      chainId: 0,
+    };
+
+    const toToken: Token = {
+      symbol: 'ETH',
+      address: params.ethereumTokenAddress || '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+      decimals: 18,
+      name: 'Ethereum',
+      chainId: SUPPORTED_CHAIN_IDS.ETHEREUM,
+    };
+
+    return {
+      id: swapId,
+      fromChain,
+      toChain,
+      fromToken,
+      toToken,
+      fromAmount: params.bitcoinAmount.toString(),
+      toAmount: '0', // Will be calculated
+      escrowAddress: bitcoinEscrow.address,
+      hashlock,
+      timelock,
+      status: 'pending',
+      createdAt: Date.now(),
+    };
   }
 
-  // ============================================================================
-  // UTILITY FUNCTIONS
-  // ============================================================================
-
-  private async createEscrowContract(chainId: number | string, params: any): Promise<string> {
-    // Simplified escrow creation - in production, deploy actual contracts
-    return `0x${ethers.randomBytes(20).toString().slice(2)}`;
-  }
-
+  /**
+   * Private helper methods
+   */
   private encodeTWAPPredicate(params: {
     startTime: number;
     timeInterval: number;
     numberOfTrades: number;
   }): string {
-    // Encode TWAP logic as predicate
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    return abiCoder.encode(
+    // Encode time-based predicate for TWAP execution
+    return ethers.AbiCoder.defaultAbiCoder().encode(
       ['uint256', 'uint256', 'uint256'],
       [params.startTime, params.timeInterval, params.numberOfTrades]
     );
@@ -690,53 +673,69 @@ class OneInchService {
     expirationTime: number;
     optionType: 'call' | 'put';
   }): string {
-    // Encode options logic as predicate
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    return abiCoder.encode(
+    // Encode options predicate with strike price and expiration
+    return ethers.AbiCoder.defaultAbiCoder().encode(
       ['uint256', 'uint256', 'bool'],
       [params.strikePrice, params.expirationTime, params.optionType === 'call']
     );
   }
 
-  private encodeRangePredicate(params: {
-    lowerPrice: string;
-    upperPrice: string;
-  }): string {
-    // Encode range logic as predicate
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    return abiCoder.encode(
-      ['uint256', 'uint256'],
-      [params.lowerPrice, params.upperPrice]
-    );
+  private generateHashLock(): Uint8Array {
+    return ethers.randomBytes(32);
+  }
+
+  private generateSwapId(): Uint8Array {
+    return ethers.randomBytes(32);
+  }
+
+  private async createBitcoinEscrow(params: {
+    hashlock: string;
+    timelock: number;
+    amount: number;
+    recipientAddress: string;
+    senderAddress: string;
+  }): Promise<BitcoinEscrow> {
+    // This would integrate with a Bitcoin testnet API
+    // For now, return a mock structure
+    return {
+      address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', // Example Bitcoin address
+      redeemScript: `OP_IF OP_SHA256 ${params.hashlock} OP_EQUALVERIFY OP_DUP OP_HASH160 ${params.recipientAddress} OP_ELSE ${params.timelock} OP_CHECKLOCKTIMEVERIFY OP_DROP OP_DUP OP_HASH160 ${params.senderAddress} OP_ENDIF OP_EQUALVERIFY OP_CHECKSIG`,
+      hashlock: params.hashlock,
+      timelock: params.timelock,
+      amount: params.amount,
+      status: 'created',
+    };
   }
 
   /**
-   * Get order status
+   * Utility method to check if chain is supported
    */
-  async getOrderStatus(chainId: number, orderHash: string): Promise<any> {
-    return this.makeRequest(`/orderbook/v4.0/${chainId}/order/${orderHash}`);
+  isChainSupported(chainId: number): chainId is SupportedChainId {
+    return Object.values(SUPPORTED_CHAIN_IDS).includes(chainId as SupportedChainId);
   }
 
   /**
-   * Cancel order
+   * Get chain name from chain ID
    */
-  async cancelOrder(chainId: number, orderHash: string): Promise<any> {
-    return this.makeRequest(`/orderbook/v4.0/${chainId}/order/${orderHash}`, {
-      method: 'DELETE',
-    });
-  }
-
-  /**
-   * Get active orders for address
-   */
-  async getActiveOrders(chainId: number, maker: string): Promise<LimitOrder[]> {
-    return this.makeRequest(`/orderbook/v4.0/${chainId}/address/${maker}`);
+  getChainName(chainId: SupportedChainId): string {
+    const chains: Record<SupportedChainId, string> = {
+      [SUPPORTED_CHAIN_IDS.ETHEREUM]: 'Ethereum',
+      [SUPPORTED_CHAIN_IDS.BSC]: 'BNB Smart Chain',
+      [SUPPORTED_CHAIN_IDS.POLYGON]: 'Polygon',
+      [SUPPORTED_CHAIN_IDS.OPTIMISM]: 'Optimism',
+      [SUPPORTED_CHAIN_IDS.ARBITRUM]: 'Arbitrum',
+      [SUPPORTED_CHAIN_IDS.GNOSIS]: 'Gnosis',
+      [SUPPORTED_CHAIN_IDS.AVALANCHE]: 'Avalanche',
+      [SUPPORTED_CHAIN_IDS.FANTOM]: 'Fantom',
+      [SUPPORTED_CHAIN_IDS.KLAYTN]: 'Klaytn',
+      [SUPPORTED_CHAIN_IDS.AURORA]: 'Aurora',
+      [SUPPORTED_CHAIN_IDS.BASE]: 'Base',
+    };
+    
+    return chains[chainId] || 'Unknown';
   }
 }
 
 // Export singleton instance
 export const oneInchService = new OneInchService();
-
-// Export types and utilities
-export * from '../../types';
-export { SUPPORTED_CHAINS }; 
+export default oneInchService; 

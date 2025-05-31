@@ -22,7 +22,12 @@ const nextConfig = {
     return config;
   },
   images: {
-    domains: ['tokens.1inch.io', 'logo.1inch.io'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
   // Disable SWC completely to avoid arm64 issues
   swcMinify: false,
@@ -31,4 +36,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig; 
+module.exports = nextConfig;

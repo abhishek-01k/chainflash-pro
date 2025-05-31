@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * 1inch Quote API Proxy
- * GET /api/1inch/quote
- * Proxies requests to 1inch Swap API v6.0 for getting swap quotes
+ * 1inch Tokens API Proxy
+ * GET /api/1inch/tokens
+ * Proxies requests to 1inch Swap API v6.0 for getting supported tokens
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
+    // Required parameters
+    const chainId = searchParams.get('chainId') || '1'; // Default to Ethereum
+
     // Check if API key is available
     const apiKey = process.env.ONEINCH_API_KEY;
     if (!apiKey) {
@@ -20,24 +23,6 @@ export async function GET(request: NextRequest) {
           statusCode: 500
         },
         { status: 500 }
-      );
-    }
-    
-    // Required parameters
-    const chainId = searchParams.get('chainId') || '1'; // Default to Ethereum
-    const src = searchParams.get('src');
-    const dst = searchParams.get('dst');
-    const amount = searchParams.get('amount');
-
-    // Validate required parameters
-    if (!src || !dst || !amount) {
-      return NextResponse.json(
-        { 
-          error: 'Missing required parameters',
-          description: 'src, dst, and amount are required',
-          statusCode: 400
-        },
-        { status: 400 }
       );
     }
 
@@ -54,33 +39,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build query parameters for 1inch API
-    const queryParams = new URLSearchParams({
-      src,
-      dst,
-      amount,
-    });
-
-    // Optional parameters
-    const optionalParams = [
-      'includeTokensInfo',
-      'includeProtocols', 
-      'fee',
-      'gasLimit',
-      'connectorTokens'
-    ];
-
-    optionalParams.forEach(param => {
-      const value = searchParams.get(param);
-      if (value !== null) {
-        queryParams.append(param, value);
-      }
-    });
-
     // Make request to 1inch API
-    const apiUrl = `https://api.1inch.dev/swap/v6.0/${chainId}/quote?${queryParams}`;
+    const apiUrl = `https://api.1inch.dev/swap/v6.0/${chainId}/tokens`;
     
-    console.log('Getting quote for:', { chainId, src: src.slice(0, 6) + '...', dst: dst.slice(0, 6) + '...', amount });
+    console.log('Fetching tokens for chain:', chainId);
     
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -95,15 +57,16 @@ export async function GET(request: NextRequest) {
 
     // Handle 1inch API errors
     if (!response.ok) {
-      console.error('1inch API Error:', {
+      console.error('1inch Tokens API Error:', {
         status: response.status,
         statusText: response.statusText,
-        data
+        data,
+        requestUrl: apiUrl
       });
 
       return NextResponse.json(
         {
-          error: data.error || 'Quote request failed',
+          error: data.error || 'Tokens request failed',
           description: data.description || response.statusText,
           statusCode: data.statusCode || response.status,
           meta: data.meta,
@@ -113,11 +76,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Return successful response
-    return NextResponse.json(data);
+    // Log successful tokens fetch (for monitoring)
+    const tokenCount = Object.keys(data.tokens || data || {}).length;
+    console.log('Tokens fetched successfully:', {
+      chainId,
+      tokenCount,
+      cached: false
+    });
+
+    // Add cache headers for tokens (they don't change frequently)
+    const headers = new Headers({
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400', // 1 hour cache, 1 day stale
+      'Content-Type': 'application/json',
+    });
+
+    // Return successful response with cache headers
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers,
+    });
 
   } catch (error) {
-    console.error('Quote API Error:', error);
+    console.error('Tokens API Error:', error);
     
     return NextResponse.json(
       {
@@ -128,4 +108,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+} 
