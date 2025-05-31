@@ -90,46 +90,65 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
     8453: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Base
   };
 
-  // Load active orders for current user
+  // Load supported tokens for current chain
   useEffect(() => {
-    async function loadActiveOrders() {
-      if (!address || !isValidChain) return;
+    async function loadTokens() {
+      if (!isValidChain) return;
 
       try {
-        const orders = await oneInchService.getActiveOrders(currentChainId, address);
-        setActiveOrders(orders);
-      } catch (err) {
-        console.error('Error loading active orders:', err);
+        setIsLoading(true);
+        setError(null);
+        console.log('Loading tokens for limit orders...');
+        
+        const tokensData = await oneInchService.getTokens(currentChainId);
+        const tokens = tokensData.tokens || tokensData;
+        
+        if (typeof tokens === 'object' && tokens !== null) {
+          setTokens(tokens as unknown as Record<string, OneInchTokenInfo>);
+        }
+
+        // Set default tokens
+        const ethToken = Object.values(tokens).find(t => 
+          t.symbol === 'ETH' || t.symbol === 'WETH' || 
+          t.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+        );
+        const usdcToken = Object.values(tokens).find(t => 
+          t.symbol === 'USDC'
+        );
+
+        if (ethToken) setMakerToken(ethToken);
+        if (usdcToken) setTakerToken(usdcToken);
+
+      } catch (err: any) {
+        console.error('Error loading tokens:', err);
+        setError(`Failed to load tokens: ${err.message}`);
+      } finally {
+        setIsLoading(false);
       }
     }
 
-    loadActiveOrders();
-  }, [address, currentChainId, isValidChain]);
+    loadTokens();
+  }, [currentChainId, isValidChain]);
 
-  // Fetch chart data when tokens change
-  useEffect(() => {
-    const fetchChartData = async () => {
-      if (!makerToken || !takerToken) return;
+  // Helper function to refresh active orders
+  const refreshActiveOrders = useCallback(async () => {
+    if (!address || !currentChainId) return;
 
-      setIsChartLoading(true);
-      setChartError(null);
-
-      console.log("fetcing chart data");
-      try {
-        const response = await fetch(`/api/1inch/charts?fromToken=${makerToken.address}&toToken=${takerToken.address}&chainId=${currentChainId}`);
-        if (!response.ok) throw new Error('Failed to fetch chart data');
-
-        const data = await response.json();
-        setChartData(data);
-      } catch (error) {
-        setChartError(error instanceof Error ? error.message : 'Failed to load chart data');
-      } finally {
-        setIsChartLoading(false);
+    try {
+      const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
+      if (response.ok) {
+        const { orders } = await response.json();
+        setActiveOrders(orders || []);
       }
-    };
+    } catch (error) {
+      console.error('Error refreshing active orders:', error);
+    }
+  }, [address, currentChainId]);
 
-    fetchChartData();
-  }, [makerToken, takerToken]);
+  // Load active orders for current user
+  useEffect(() => {
+    refreshActiveOrders();
+  }, [refreshActiveOrders]);
 
   // Reset SDK instance when chain changes
   useEffect(() => {
@@ -174,47 +193,33 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
         takingAmountBigInt: takingAmountBigInt.toString()
       });
 
-      // Initialize SDK
-      const sdkConfig: LimitOrderSDKConfig = {
-        authKey: oneInchApiKey,
-        networkId: currentChainId
-      };
-      
-      console.log('Initializing SDK with config:', sdkConfig);
-      const sdk = getOneInchLimitOrderSDK(sdkConfig);
+      // Step 1: Create order via API route
+      console.log('Creating limit order via API...');
+      const createResponse = await fetch('/api/1inch/limit-orders/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          makerAsset: makerToken.address,
+          takerAsset: takerToken.address,
+          makingAmount: makingAmountBigInt.toString(),
+          takingAmount: takingAmountBigInt.toString(),
+          maker: address,
+          chainId: currentChainId,
+          expiration: parseInt(expiration),
+          allowPartialFill: true,
+          allowPriceImprovement: true,
+        }),
+      });
 
-      // Validate order parameters
-      const orderParams: CreateOrderParams = {
-        makerAsset: makerToken.address,
-        takerAsset: takerToken.address,
-        makingAmount: makingAmountBigInt,
-        takingAmount: takingAmountBigInt,
-        maker: address,
-        expiration: parseInt(expiration),
-        allowPartialFill: true,
-        allowPriceImprovement: true,
-      };
-
-      console.log('Order parameters:', orderParams);
-
-      const validation = sdk.validateOrderParams(orderParams);
-      if (!validation.isValid) {
-        throw new Error(validation.errors.join(', '));
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.error || 'Failed to create order');
       }
 
-      console.log('Order parameters validated successfully');
-
-      // Step 1: Create order structure
-      console.log('Creating limit order...');
-      const order = await sdk.createLimitOrder(orderParams);
-      console.log('Created order:', order);
-
-      // Step 2: Get typed data for signing
-      console.log('Getting typed data...');
-      const typedData = sdk.getOrderTypedData(order);
-      const orderHash = sdk.getOrderHash(order);
-
-      console.log('Order hash:', orderHash);
+      const { order, typedData, orderHash } = await createResponse.json();
+      console.log('Order created successfully:', { orderHash });
 
       setCurrentOrder({
         order,
@@ -224,7 +229,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
         typedData,
       });
 
-      // Step 3: Sign order
+      // Step 2: Sign order
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'signing' } : null);
 
       console.log('Starting order signing...');
@@ -250,11 +255,32 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, signature, status: 'signed' } : null);
 
-      // Step 4: Submit to 1inch
+      // Step 3: Submit to 1inch via API route
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitting' } : null);
 
-      console.log('Submitting order to 1inch...');
-      await sdk.submitOrder(order, signature);
+      console.log('Submitting order to 1inch via API...');
+      const submitResponse = await fetch('/api/1inch/limit-orders/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderData: {
+            ...order,
+            orderHash,
+          },
+          signature,
+          chainId: currentChainId,
+        }),
+      });
+
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json();
+        throw new Error(errorData.error || 'Failed to submit order');
+      }
+
+      const submitResult = await submitResponse.json();
+      console.log('Order submitted successfully:', submitResult);
 
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitted' } : null);
       
@@ -264,9 +290,17 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
       });
 
       // Refresh active orders
-      console.log('Refreshing active orders...');
-      const orders = await sdk.getActiveOrders(address);
-      setActiveOrders(orders);
+      if (address && currentChainId) {
+        try {
+          const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
+          if (response.ok) {
+            const { orders } = await response.json();
+            setActiveOrders(orders || []);
+          }
+        } catch (error) {
+          console.error('Error refreshing active orders after order creation:', error);
+        }
+      }
 
       // Reset form
       setMakerAmount('');
@@ -295,13 +329,21 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
     try {
       setIsLoading(true);
       
-      const sdkConfig: LimitOrderSDKConfig = {
-        authKey: oneInchApiKey,
-        networkId: currentChainId
-      };
-      
-      const sdk = getOneInchLimitOrderSDK(sdkConfig);
-      await sdk.cancelOrder(orderHash);
+      const response = await fetch('/api/1inch/limit-orders/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderHash,
+          chainId: currentChainId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to cancel order');
+      }
       
       toast({
         title: 'Order Cancelled',
@@ -309,8 +351,17 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
       });
 
       // Refresh active orders
-      const orders = await sdk.getActiveOrders(address!);
-      setActiveOrders(orders);
+      if (address && currentChainId) {
+        try {
+          const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
+          if (response.ok) {
+            const { orders } = await response.json();
+            setActiveOrders(orders || []);
+          }
+        } catch (error) {
+          console.error('Error refreshing active orders after cancellation:', error);
+        }
+      }
     } catch (err: any) {
       toast({
         title: 'Cancellation Failed',
@@ -320,7 +371,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
     } finally {
       setIsLoading(false);
     }
-  }, [currentChainId, address, oneInchApiKey, toast]);
+  }, [currentChainId, oneInchApiKey, toast, address]);
 
   if (!isConnected) {
     return (

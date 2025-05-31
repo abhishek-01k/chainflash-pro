@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOneInchLimitOrderSDK, type LimitOrderSDKConfig } from '@/lib/services/1inch-limit-order-sdk';
-import { LimitOrder } from '@1inch/limit-order-sdk';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
     const {
-      order,
+      orderData,
       signature,
       chainId,
     } = body;
 
     // Validate required fields
-    if (!order || !signature || !chainId) {
+    if (!orderData || !signature || !chainId) {
       return NextResponse.json(
-        { error: 'Missing required fields: order, signature, and chainId are required' },
+        { error: 'Missing required fields: orderData, signature, and chainId are required' },
         { status: 400 }
       );
     }
@@ -37,23 +36,33 @@ export async function POST(request: NextRequest) {
     
     const sdk = getOneInchLimitOrderSDK(sdkConfig);
 
-    console.log('Submitting order to 1inch:', { orderHash: order.orderHash });
+    console.log('Submitting order to 1inch via API...');
 
-    // Reconstruct LimitOrder object with BigInt values
-    const limitOrder = new LimitOrder({
-      salt: BigInt(order.salt || 0),
-      maker: order.maker,
-      receiver: order.receiver,
-      makerAsset: order.makerAsset,
-      takerAsset: order.takerAsset,
-      makerTraits: BigInt(order.makerTraits || 0),
-      makingAmount: BigInt(order.makingAmount),
-      takingAmount: BigInt(order.takingAmount),
+    // Submit the order using the raw HTTP API since we can't easily reconstruct the LimitOrder object
+    const submitUrl = `https://api.1inch.dev/orderbook/v4.0/${chainId}/order`;
+    
+    const submitPayload = {
+      orderHash: orderData.orderHash,
+      signature,
+      data: orderData,
+    };
+
+    const response = await fetch(submitUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(submitPayload),
     });
 
-    // Submit the order
-    const result = await sdk.submitOrder(limitOrder, signature);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('1inch API error:', response.status, errorText);
+      throw new Error(`1inch API error: ${response.status} ${errorText}`);
+    }
 
+    const result = await response.json();
     console.log('Order submitted successfully:', result);
 
     return NextResponse.json({

@@ -117,39 +117,126 @@ export class OneInchLimitOrderSDK {
   }
 
   /**
+   * Get fee information for creating orders
+   */
+  async getFeeInfo(makerAsset: string, takerAsset: string, makingAmount: bigint, takingAmount: bigint): Promise<any> {
+    try {
+      const url = `https://api.1inch.dev/orderbook/v4.0/${this.networkId}/fee-info?makerAsset=${makerAsset}&takerAsset=${takerAsset}&makerAmount=${makingAmount.toString()}&takerAmount=${takingAmount.toString()}`;
+      
+      const feeInfo = await this.httpConnector.get(url, {
+        'Authorization': `Bearer ${this.authKey}`,
+        'Accept': 'application/json',
+      }) as any;
+
+      // Ensure whitelist is an array
+      if (feeInfo && typeof feeInfo === 'object') {
+        if (!feeInfo.whitelist) {
+          feeInfo.whitelist = [];
+        } else if (!Array.isArray(feeInfo.whitelist)) {
+          feeInfo.whitelist = [];
+        }
+      }
+
+      return feeInfo;
+    } catch (error) {
+      console.warn('Failed to fetch fee info, using defaults:', error);
+      // Return default fee info structure
+      return {
+        whitelist: [],
+        fees: {},
+        resolverFee: '0',
+        integrator: '0x0000000000000000000000000000000000000000'
+      };
+    }
+  }
+
+  /**
    * Create a limit order using the official SDK
    */
   async createLimitOrder(params: CreateOrderParams): Promise<LimitOrder> {
-    const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
-    const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
+    try {
+      const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
+      const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
 
-    // Generate proper maker traits using SDK
-    const makerTraits = MakerTraits.default()
-      .withExpiration(expiration)
-      .withNonce(params.salt || randBigInt(UINT_40_MAX));
+      // Fetch fee information first
+      console.log('Fetching fee information...');
+      const feeInfo = await this.getFeeInfo(
+        params.makerAsset,
+        params.takerAsset,
+        params.makingAmount,
+        params.takingAmount
+      );
+      console.log('Fee info received:', feeInfo);
 
-    // Enable partial fills if requested (this is the correct method name)
-    if (params.allowPartialFill) {
-      makerTraits.allowPartialFills();
+      // Generate proper maker traits using SDK
+      const makerTraits = MakerTraits.default()
+        .withExpiration(expiration)
+        .withNonce(params.salt || randBigInt(UINT_40_MAX));
+
+      // Enable partial fills if requested (this is the correct method name)
+      if (params.allowPartialFill) {
+        makerTraits.allowPartialFills();
+      }
+
+      // Enable multiple fills for better liquidity
+      if (params.allowPriceImprovement) {
+        makerTraits.allowMultipleFills();
+      }
+
+      // Create order using SDK with proper parameters
+      const orderData = {
+        makerAsset: new Address(params.makerAsset),
+        takerAsset: new Address(params.takerAsset),
+        makingAmount: params.makingAmount,
+        takingAmount: params.takingAmount,
+        maker: new Address(params.maker),
+        salt: params.salt,
+        receiver: params.receiver ? new Address(params.receiver) : undefined,
+      };
+
+      console.log('Creating order with data:', orderData);
+      const order = await this.sdk.createOrder(orderData, makerTraits);
+
+      return order;
+    } catch (error: any) {
+      console.error('Error in createLimitOrder:', error);
+      // If the error is related to fee params, try creating without fee info
+      if (error.message && error.message.includes('feeParams')) {
+        console.log('Retrying order creation without fee info...');
+        try {
+          const expiresIn = BigInt(params.expiration || 3600);
+          const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
+
+          const makerTraits = MakerTraits.default()
+            .withExpiration(expiration)
+            .withNonce(params.salt || randBigInt(UINT_40_MAX));
+
+          if (params.allowPartialFill) {
+            makerTraits.allowPartialFills();
+          }
+
+          if (params.allowPriceImprovement) {
+            makerTraits.allowMultipleFills();
+          }
+
+          const order = await this.sdk.createOrder({
+            makerAsset: new Address(params.makerAsset),
+            takerAsset: new Address(params.takerAsset),
+            makingAmount: params.makingAmount,
+            takingAmount: params.takingAmount,
+            maker: new Address(params.maker),
+            salt: params.salt,
+            receiver: params.receiver ? new Address(params.receiver) : undefined,
+          }, makerTraits);
+
+          return order;
+        } catch (retryError) {
+          console.error('Retry also failed:', retryError);
+          throw retryError;
+        }
+      }
+      throw error;
     }
-
-    // Enable multiple fills for better liquidity
-    if (params.allowPriceImprovement) {
-      makerTraits.allowMultipleFills();
-    }
-
-    // Create order using SDK
-    const order = await this.sdk.createOrder({
-      makerAsset: new Address(params.makerAsset),
-      takerAsset: new Address(params.takerAsset),
-      makingAmount: params.makingAmount,
-      takingAmount: params.takingAmount,
-      maker: new Address(params.maker),
-      salt: params.salt,
-      receiver: params.receiver ? new Address(params.receiver) : undefined,
-    }, makerTraits);
-
-    return order;
   }
 
   /**
@@ -366,6 +453,56 @@ export class OneInchLimitOrderSDK {
    */
   getAuthKey(): string {
     return this.authKey.slice(0, 8) + '...'; // Don't expose full key
+  }
+
+  /**
+   * Create a limit order directly without fee fetching (fallback method)
+   */
+  async createLimitOrderDirect(params: CreateOrderParams): Promise<LimitOrder> {
+    try {
+      console.log('Creating limit order directly without fee info...');
+      
+      const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
+      const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
+
+      // Generate proper maker traits using SDK
+      const makerTraits = MakerTraits.default()
+        .withExpiration(expiration)
+        .withNonce(params.salt || randBigInt(UINT_40_MAX));
+
+      // Enable partial fills if requested
+      if (params.allowPartialFill) {
+        makerTraits.allowPartialFills();
+      }
+
+      // Enable multiple fills for better liquidity
+      if (params.allowPriceImprovement) {
+        makerTraits.allowMultipleFills();
+      }
+
+      // Create order directly using SDK constructor or builder
+      // This bypasses any fee fetching logic
+      const orderData = {
+        makerAsset: new Address(params.makerAsset),
+        takerAsset: new Address(params.takerAsset),
+        makingAmount: params.makingAmount,
+        takingAmount: params.takingAmount,
+        maker: new Address(params.maker),
+        salt: params.salt || randBigInt(UINT_40_MAX),
+        receiver: params.receiver ? new Address(params.receiver) : new Address('0x0000000000000000000000000000000000000000'),
+      };
+
+      console.log('Creating order with direct method:', orderData);
+      
+      // Create order with minimal SDK usage to avoid fee issues
+      const order = new LimitOrder(orderData, makerTraits);
+      
+      console.log('Order created successfully with direct method');
+      return order;
+    } catch (error: any) {
+      console.error('Error in createLimitOrderDirect:', error);
+      throw error;
+    }
   }
 }
 
