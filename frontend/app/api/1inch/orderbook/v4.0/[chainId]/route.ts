@@ -32,6 +32,8 @@ export async function POST(
     try {
         const { chainId } = await params;
 
+        console.log("chainId", chainId);
+
         // Validate chain ID and orderbook support
         const supportedChains = ['1', '56', '137', '10', '42161', '100', '43114', '250', '8217', '1313161554'];
         if (!supportedChains.includes(chainId)) {
@@ -52,7 +54,7 @@ export async function POST(
         // Validate required parameters
         if (!orderHash || !signature || !data) {
             return NextResponse.json(
-                { 
+                {
                     error: 'Missing required parameters',
                     description: 'orderHash, signature, and data are required',
                     statusCode: 400
@@ -63,11 +65,11 @@ export async function POST(
 
         // Validate order data structure
         const requiredDataFields: (keyof LimitOrderV4Data)[] = [
-            'makerAsset', 'takerAsset', 'maker', 'receiver', 
+            'makerAsset', 'takerAsset', 'maker', 'receiver',
             'makingAmount', 'takingAmount', 'salt', 'extension', 'makerTraits'
         ];
         const missingFields = requiredDataFields.filter(field => data[field] === undefined);
-        
+
         if (missingFields.length > 0) {
             return NextResponse.json(
                 {
@@ -108,7 +110,7 @@ export async function POST(
 
         // Make request to 1inch Orderbook API v4.0
         const apiUrl = `https://api.1inch.dev/orderbook/v4.0/${chainId}`;
-        
+
         console.log('Creating limit order v4.0:', {
             chainId,
             apiUrl,
@@ -117,7 +119,7 @@ export async function POST(
             makerAsset: `${data.makerAsset.slice(0, 6)}...${data.makerAsset.slice(-4)}`,
             takerAsset: `${data.takerAsset.slice(0, 6)}...${data.takerAsset.slice(-4)}`
         });
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -165,7 +167,7 @@ export async function POST(
 
     } catch (error) {
         console.error('Orderbook v4.0 API Error:', error);
-        
+
         return NextResponse.json(
             {
                 error: 'Internal server error',

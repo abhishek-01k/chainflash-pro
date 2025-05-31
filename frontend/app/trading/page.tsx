@@ -25,7 +25,7 @@ export default function TradingPage() {
   const isValidChain = currentChainId && oneInchService.isChainSupported(currentChainId);
 
   // Function to fetch balances
-  const fetchBalances = useCallback(async () => {
+  const fetchBalances = async () => {
     if (!address || !currentChainId || !tokens) return;
 
     try {
@@ -48,14 +48,14 @@ export default function TradingPage() {
       console.error('Error fetching balances:', err);
       setError('Failed to fetch token balances');
     }
-  }, [address, currentChainId, tokens]);
+  };
 
   // Fetch balances when tokens or address changes
   useEffect(() => {
     if (Object.keys(tokens).length > 0 && address) {
       fetchBalances();
     }
-  }, [tokens, address, fetchBalances]);
+  }, [tokens, address]);
 
   useEffect(() => {
     async function loadTokens() {
@@ -212,7 +212,7 @@ export default function TradingPage() {
     }
 
     loadTokens();
-  }, [isValidChain]);
+  }, [currentChainId, isValidChain]);
 
   return (
     <div className="container mx-auto py-8 space-y-8">

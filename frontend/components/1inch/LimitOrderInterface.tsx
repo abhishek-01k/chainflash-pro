@@ -18,6 +18,8 @@ import { getOneInchLimitOrderSDK, resetOneInchLimitOrderSDK, type CreateOrderPar
 import { useToast } from '@/hooks/use-toast';
 import { TokenSelector } from './TokenSelector';
 import { PriceChart } from '@/components/charts/price-chart';
+import MyOrders from './MyOrders';
+import { fetchChartData } from '@/lib/api/1inch/charts';
 
 interface LimitOrderInterfaceProps {
   className?: string;
@@ -80,75 +82,40 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
   // Get 1inch API key from environment
   const oneInchApiKey = process.env.NEXT_PUBLIC_1INCH_API_KEY || process.env.NEXT_PUBLIC_ONEINCH_API_KEY;
 
-  // 1inch Limit Order Protocol Contract Addresses
-  const LIMIT_ORDER_PROTOCOL_ADDRESS = {
-    1: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Ethereum
-    56: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // BSC
-    137: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Polygon
-    42161: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Arbitrum
-    10: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Optimism
-    8453: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Base
-  };
+  const fetchChart = async () => {
+    if (!makerToken?.address || !takerToken?.address || !currentChainId) {
+      setChartError('Missing parameter i.e, fromtoken, toToken, chainId')
+      return;
+    };
 
-  // Load supported tokens for current chain
-  useEffect(() => {
-    async function loadTokens() {
-      if (!isValidChain) return;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        console.log('Loading tokens for limit orders...');
-        
-        const tokensData = await oneInchService.getTokens(currentChainId);
-        const tokens = tokensData.tokens || tokensData;
-        
-        if (typeof tokens === 'object' && tokens !== null) {
-          setTokens(tokens as unknown as Record<string, OneInchTokenInfo>);
-        }
-
-        // Set default tokens
-        const ethToken = Object.values(tokens).find(t => 
-          t.symbol === 'ETH' || t.symbol === 'WETH' || 
-          t.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
-        );
-        const usdcToken = Object.values(tokens).find(t => 
-          t.symbol === 'USDC'
-        );
-
-        if (ethToken) setMakerToken(ethToken);
-        if (usdcToken) setTakerToken(usdcToken);
-
-      } catch (err: any) {
-        console.error('Error loading tokens:', err);
-        setError(`Failed to load tokens: ${err.message}`);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadTokens();
-  }, [currentChainId, isValidChain]);
-
-  // Helper function to refresh active orders
-  const refreshActiveOrders = useCallback(async () => {
-    if (!address || !currentChainId) return;
+    setIsChartLoading(true);
+    setChartError(null);
 
     try {
-      const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
-      if (response.ok) {
-        const { orders } = await response.json();
-        setActiveOrders(orders || []);
-      }
-    } catch (error) {
-      console.error('Error refreshing active orders:', error);
-    }
-  }, [address, currentChainId]);
+      const response = await fetch(`/api/1inch/charts?fromToken=${makerToken.address}&toToken=${takerToken.address}&period=24H&chainId=${currentChainId}`);
 
-  // Load active orders for current user
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.description || errorData.error || 'Failed to fetch chart data');
+      }
+
+      const data = await response.json();
+      console.log("Chart Data:", data);
+
+      setChartData(data);
+    } catch (error) {
+      setChartError(error instanceof Error ? error.message : 'Failed to fetch chart data');
+      setChartData(undefined);
+    } finally {
+      setIsChartLoading(false);
+    }
+  };
+
   useEffect(() => {
-    refreshActiveOrders();
-  }, [refreshActiveOrders]);
+    if (isValidChain) {
+      fetchChart();
+    }
+  }, [makerToken, takerToken, isValidChain])
 
   // Reset SDK instance when chain changes
   useEffect(() => {
@@ -283,7 +250,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
       console.log('Order submitted successfully:', submitResult);
 
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitted' } : null);
-      
+
       toast({
         title: 'Limit Order Created',
         description: `Order submitted successfully!`,
@@ -311,7 +278,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
       console.error('Error creating limit order:', err);
       setError(err.message || 'Failed to create limit order');
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'error' } : null);
-      
+
       toast({
         title: 'Order Creation Failed',
         description: err.message || 'Failed to create limit order',
@@ -328,7 +295,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
     try {
       setIsLoading(true);
-      
+
       const response = await fetch('/api/1inch/limit-orders/cancel', {
         method: 'POST',
         headers: {
@@ -344,7 +311,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to cancel order');
       }
-      
+
       toast({
         title: 'Order Cancelled',
         description: 'Limit order has been cancelled successfully',
@@ -373,51 +340,6 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
     }
   }, [currentChainId, oneInchApiKey, toast, address]);
 
-  if (!isConnected) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Please connect your wallet to create limit orders.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!isValidChain) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Please switch to a supported network for limit orders.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!oneInchApiKey) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-6">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              1inch API key is required. Please set NEXT_PUBLIC_1INCH_API_KEY or NEXT_PUBLIC_ONEINCH_API_KEY in your environment variables.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className={`space-y-6 ${className}`}>
       <Tabs defaultValue="create" className="w-full">
@@ -428,7 +350,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
           </TabsTrigger>
           <TabsTrigger value="orders" className="flex items-center space-x-2">
             <Clock className="w-4 h-4" />
-            <span>My Orders ({activeOrders.length})</span>
+            <span>My Orders</span>
           </TabsTrigger>
         </TabsList>
 
@@ -665,78 +587,13 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
         </TabsContent>
 
         <TabsContent value="orders">
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>My Active Orders</span>
-                <Badge variant="outline" className="text-xs">
-                  {activeOrders.length} orders
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activeOrders.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted/50 flex items-center justify-center">
-                    <Target className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <p className="text-lg font-medium text-muted-foreground mb-2">No active orders</p>
-                  <p className="text-sm text-muted-foreground mb-4">Create your first limit order to get started</p>
-                  <Button
-                    onClick={() => {
-                      const tabs = document.querySelector('[value="create"]') as HTMLElement;
-                      tabs?.click();
-                    }}
-                    variant="outline"
-                    className="flex items-center space-x-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create Order</span>
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activeOrders.map((order, index) => (
-                    <div key={index} className="p-4 border rounded-lg hover:bg-accent/30 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <div className="font-medium text-base">
-                              {getTokenName(order.data?.makerAsset, tokens)} → {getTokenName(order.data?.takerAsset, tokens)}
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              Limit
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Pay: {formatUnits(BigInt(order.data?.makingAmount || 0), 18)} {getTokenName(order.data?.makerAsset, tokens)} •
-                            Receive: {formatUnits(BigInt(order.data?.takingAmount || 0), 18)} {getTokenName(order.data?.takerAsset, tokens)}
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            Hash: {order.orderHash?.slice(0, 20)}...
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCancelOrder(order.orderHash)}
-                          disabled={isLoading}
-                          className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20"
-                        >
-                          {isLoading ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            'Cancel'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <MyOrders
+            handleCancelOrder={handleCancelOrder}
+            tokens={tokens}
+            isLoading={isLoading}
+          />
+
+
         </TabsContent>
       </Tabs>
     </div>
