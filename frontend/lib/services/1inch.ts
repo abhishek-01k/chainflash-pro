@@ -66,7 +66,7 @@ export interface OneInchSwapResponse {
     to: string;
     data: string;
     value: string;
-    gasPrice: string;
+  gasPrice: string;
     gas: string;
   };
 }
@@ -105,18 +105,9 @@ export interface BalanceResponse {
 }
 
 export interface OrderbookOrderResponse {
-  orderHash: string;
-  signature: string;
-  order: {
-    salt: string;
-    maker: string;
-    receiver: string;
-    makerAsset: string;
-    takerAsset: string;
-    makingAmount: string;
-    takingAmount: string;
-    makerTraits: string;
-  };
+  success: boolean;
+  // The v4.0 API might return additional fields, but 'success' is the primary one
+  // based on the documentation showing Code: 201 with success: boolean
 }
 
 class OneInchService {
@@ -421,31 +412,38 @@ class OneInchService {
 
   /**
    * Create limit order (Orderbook API)
-   * POST /api/1inch/orderbook
+   * POST /api/1inch/orderbook/v4.0/{chainId}
    */
   async createLimitOrder(params: {
     chainId: SupportedChainId;
-    order: {
-      salt: string;
-      maker: string;
-      receiver: string;
+    orderHash: string;
+    signature: string;
+    data: {
       makerAsset: string;
       takerAsset: string;
+      maker: string;
+      receiver: string;
       makingAmount: string;
       takingAmount: string;
+      salt: string;
+      extension: string;
       makerTraits: string;
+      allowedSender: string;
     };
-    signature: string;
   }): Promise<OrderbookOrderResponse> {
-    const searchParams = new URLSearchParams({
-      chainId: params.chainId.toString(),
+    console.log('Creating limit order:', {
+      chainId: params.chainId,
+      orderHash: params.orderHash,
+      data: params.data,
+      url: `${this.baseURL}/orderbook/v4.0/${params.chainId}`,
     });
 
-    return this.makeRequest(`/orderbook?${searchParams}`, {
+    return this.makeRequest(`/orderbook/v4.0/${params.chainId}`, {
       method: 'POST',
       body: JSON.stringify({
-        order: params.order,
+        orderHash: params.orderHash,
         signature: params.signature,
+        data: params.data,
       }),
     });
   }

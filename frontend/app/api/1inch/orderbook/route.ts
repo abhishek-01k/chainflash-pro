@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ethers } from 'ethers';
 
 /**
  * 1inch Orderbook API Proxy
- * POST /api/1inch/orderbook
- * Proxies requests to 1inch Orderbook API v4.0 for creating limit orders
+ * This route is no longer used - moved to /api/1inch/orderbook/v4.0/[chainId]/route.ts
+ * Keeping for backward compatibility but redirecting
  */
-
-interface LimitOrder {
-    salt: string;
-    maker: string;
-    receiver: string;
-    makerAsset: string;
-    takerAsset: string;
-    makingAmount: string;
-    takingAmount: string;
-    makerTraits: string;
-}
 
 export async function POST(request: NextRequest) {
     try {

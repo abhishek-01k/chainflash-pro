@@ -53,7 +53,22 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const data = await response.json();
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType && contentType.includes('application/json');
+    
+    let data;
+    if (isJson) {
+      data = await response.json();
+    } else {
+      // Handle plain text responses (like "Invalid API key")
+      const textResponse = await response.text();
+      data = { 
+        error: textResponse, 
+        description: `API returned non-JSON response: ${textResponse}`,
+        statusCode: response.status 
+      };
+    }
 
     // Handle 1inch API errors
     if (!response.ok) {
@@ -61,8 +76,23 @@ export async function GET(request: NextRequest) {
         status: response.status,
         statusText: response.statusText,
         data,
-        requestUrl: apiUrl
+        requestUrl: apiUrl,
+        contentType,
+        apiKey: apiKey ? `${apiKey.slice(0, 8)}...` : 'not set'
       });
+
+      // Special handling for API key errors
+      if (response.status === 401 || (typeof data.error === 'string' && data.error.includes('Invalid API key'))) {
+        return NextResponse.json(
+          {
+            error: 'Invalid API key',
+            description: 'The 1inch API key is invalid or expired. Please check your ONEINCH_API_KEY environment variable.',
+            statusCode: 401,
+            help: 'Get a free API key from https://portal.1inch.dev'
+          },
+          { status: 401 }
+        );
+      }
 
       return NextResponse.json(
         {
