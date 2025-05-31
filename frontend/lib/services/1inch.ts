@@ -66,7 +66,7 @@ export interface OneInchSwapResponse {
     to: string;
     data: string;
     value: string;
-  gasPrice: string;
+    gasPrice: string;
     gas: string;
   };
 }
@@ -121,11 +121,11 @@ class OneInchService {
    * Make request to our internal API routes
    */
   private async makeRequest<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     try {
       const response = await fetch(url, {
         ...options,
@@ -139,8 +139,7 @@ class OneInchService {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          `API Error (${response.status}): ${
-            errorData.error || errorData.description || response.statusText
+          `API Error (${response.status}): ${errorData.error || errorData.description || response.statusText
           }`
         );
       }
@@ -193,9 +192,9 @@ class OneInchService {
     to: string;
     value: string;
   }> {
-    const params = new URLSearchParams({ 
+    const params = new URLSearchParams({
       chainId: chainId.toString(),
-      tokenAddress 
+      tokenAddress
     });
     if (amount) params.append('amount', amount);
 
@@ -372,6 +371,7 @@ class OneInchService {
       chainId: chainId.toString(),
       walletAddress,
     });
+    console.log("params", params);
 
     return this.makeRequest(`/balances?${params}`);
   }
@@ -406,7 +406,7 @@ class OneInchService {
       addresses: addresses.join(','),
       currency,
     });
-    
+
     return this.makeRequest(`/prices?${params}`);
   }
 
@@ -463,7 +463,7 @@ class OneInchService {
     });
     if (page) params.append('page', page.toString());
     if (limit) params.append('limit', limit.toString());
-    
+
     return this.makeRequest(`/orderbook/orders/${maker}?${params}`);
   }
 
@@ -729,7 +729,7 @@ class OneInchService {
       [SUPPORTED_CHAIN_IDS.AURORA]: 'Aurora',
       [SUPPORTED_CHAIN_IDS.BASE]: 'Base',
     };
-    
+
     return chains[chainId] || 'Unknown';
   }
 }

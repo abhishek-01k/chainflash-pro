@@ -27,17 +27,6 @@ export default function IndexPage() {
           </div>
         </div>
 
-        {/* Main Trading Interface */}
-        <div className="lg:col-span-8">
-          <div className="space-y-6">
-            {/* Price Chart */}
-            <div className="h-96">
-              <PriceChart />
-            </div>
-
-          </div>
-        </div>
-
         {/* Sidebar */}
         <div className="lg:col-span-4">
           <div className="space-y-6">

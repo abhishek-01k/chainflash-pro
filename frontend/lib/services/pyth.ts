@@ -13,7 +13,7 @@ export const PYTH_PRICE_FEEDS = {
   'USDT/USD': '0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b',
   'SOL/USD': '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d',
   'AVAX/USD': '0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7',
-  'MATIC/USD': '0x5de33a9112c2b700b8d30b8a3402c103578ccfa2765696471cc672bd5cf6ac52',
+  // 'MATIC/USD': '0x5de33a9112c2b700b8d30b8a3402c103578ccfa2765696471cc672bd5cf6ac52',
 } as const;
 
 export interface PythPriceData {
@@ -61,7 +61,7 @@ class PythService {
   ): Promise<void> {
     try {
       this.priceSubscriptions.set(priceId, callback);
-      
+
       if (!this.wsConnection) {
         await this.initializeWebSocketConnection();
       }
@@ -125,17 +125,17 @@ class PythService {
   // Get latest price data using REST API
   async getLatestPriceFeeds(priceIds: string[]): Promise<PythPriceData[]> {
     try {
-      const idsParam = priceIds.map(id => `ids[]=${id}`).join('&');
-      const response = await fetch(
-        `${HERMES_ENDPOINT}/api/latest_price_feeds?${idsParam}&verbose=true`
-      );
+      const url = new URL(`${HERMES_ENDPOINT}/v2/updates/price/latest`);
+      priceIds.forEach(id => url.searchParams.append('ids[]', id));
+
+      const response = await fetch(url.toString());
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      
+
       return data.parsed.map((feed: any) => ({
         id: feed.id,
         price: {
@@ -162,25 +162,26 @@ class PythService {
     try {
       const opportunities: ArbitrageOpportunity[] = [];
       const priceIds = Object.values(PYTH_PRICE_FEEDS);
-      
+
       // Get price data from Pyth
       const priceFeeds = await this.getLatestPriceFeeds(priceIds);
-      
+      console.log("priceFeeds", priceFeeds);
+
       // Simulate cross-chain price comparison
       // In production, you'd fetch prices from multiple DEXes/chains
       for (const feed of priceFeeds) {
         const basePrice = parseFloat(feed.price.price) * Math.pow(10, feed.price.expo);
         const confidence = parseFloat(feed.price.conf) * Math.pow(10, feed.price.expo);
-        
+
         // Simulate price differences across chains (replace with real chain data)
         const ethereumPrice = basePrice;
         const arbitrumPrice = basePrice * (1 + (Math.random() * 0.02 - 0.01)); // ±1%
-        
+
         // Check for arbitrage opportunities
         if (Math.abs(ethereumPrice - arbitrumPrice) > confidence) {
           const priceDiff = Math.abs(ethereumPrice - arbitrumPrice);
           const percentageDiff = (priceDiff / Math.min(ethereumPrice, arbitrumPrice)) * 100;
-          
+
           if (percentageDiff > 0.1) { // Minimum 0.1% difference
             opportunities.push({
               tokenPair: this.getPairNameFromId(feed.id),
@@ -197,7 +198,7 @@ class PythService {
           }
         }
       }
-      
+
       return opportunities.sort((a, b) => b.percentageDiff - a.percentageDiff);
     } catch (error) {
       console.error('Error detecting arbitrage opportunities:', error);
@@ -237,7 +238,7 @@ class PythService {
       const price = parseFloat(priceData.price.price) * Math.pow(10, priceData.price.expo);
       const confidence = parseFloat(priceData.price.conf) * Math.pow(10, priceData.price.expo);
       const confidenceRatio = confidence / price;
-      
+
       let recommendation: 'safe' | 'caution' | 'high_risk';
       if (confidenceRatio < 0.001) {
         recommendation = 'safe';
@@ -246,7 +247,7 @@ class PythService {
       } else {
         recommendation = 'high_risk';
       }
-      
+
       return {
         price,
         confidence,

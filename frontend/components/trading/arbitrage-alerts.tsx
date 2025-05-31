@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
+import { pythService } from '@/lib/services/pyth';
 
 export function ArbitrageAlerts() {
   const [alerts] = useState([
@@ -28,12 +29,24 @@ export function ArbitrageAlerts() {
     },
   ]);
 
+
+  const findArb = async () => {
+    try {
+      const res = await pythService.detectArbitrageOpportunities();
+      console.log("Res", res);
+    } catch (error) {
+      console.log("Error", error);
+    }
+
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-green-500" />
           Arbitrage Opportunities
+          <Button onClick={findArb}>findArb</Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

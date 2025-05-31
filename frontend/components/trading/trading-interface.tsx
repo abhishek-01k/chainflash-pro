@@ -530,24 +530,15 @@ export function TradingInterface() {
             </div>
           </TabsContent>
 
-          <TabsContent value="limit" className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <Label>Limit Price ({formData.toToken.symbol})</Label>
+          <TabsContent value="limit" className="space-y-4 mt-8">
+            <div className="space-y-4 flex flex-col gap-4">
+              <div className='flex flex-col gap-2'>
+                <Label>Pay ({formData.fromToken.symbol}) at rate</Label>
                 <Input
                   type="number"
                   placeholder="0.0"
                   value={formData.limitPrice || ''}
                   onChange={(e) => setFormData({ ...formData, limitPrice: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Amount ({formData.fromToken.symbol})</Label>
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={formData.fromAmount}
-                  onChange={(e) => setFormData({ ...formData, fromAmount: e.target.value })}
                 />
               </div>
               <Button

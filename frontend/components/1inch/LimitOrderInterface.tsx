@@ -15,10 +15,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { oneInchService, SUPPORTED_CHAIN_IDS, type SupportedChainId, type OneInchTokenInfo } from '@/lib/services/1inch';
 import { useToast } from '@/hooks/use-toast';
+import { TokenSelector } from './TokenSelector';
+import { PriceChart } from '@/components/charts/price-chart';
 
 interface LimitOrderInterfaceProps {
   className?: string;
+  tokens: Record<string, OneInchTokenInfo>;
+  setTokens: (tokens: Record<string, OneInchTokenInfo>) => void;
+  makerToken: OneInchTokenInfo;
+  setMakerToken: (makerToken: OneInchTokenInfo) => void;
+  takerToken: OneInchTokenInfo;
+  setTakerToken: (takerToken: OneInchTokenInfo) => void;
+  balances: Record<string, string>;
 }
+
+// Helper function to get token name from address
+const getTokenName = (tokenAddress: string, tokens: Record<string, OneInchTokenInfo>): string => {
+  const token = tokens[tokenAddress.toLowerCase()];
+  return token ? token.symbol : tokenAddress;
+};
 
 interface LimitOrder {
   salt: string;
@@ -39,272 +54,22 @@ interface OrderData {
   status: 'draft' | 'signing' | 'signed' | 'submitting' | 'submitted' | 'error';
 }
 
-interface TokenSelectorProps {
-  value: OneInchTokenInfo | null;
-  onChange: (token: OneInchTokenInfo) => void;
-  label: string;
-  tokens: Record<string, OneInchTokenInfo>;
-  otherToken?: OneInchTokenInfo | null;
+interface ChartDataPoint {
+  time: number;
+  value: number;
 }
 
-function TokenSelector({ value, onChange, label, tokens, otherToken }: TokenSelectorProps) {
-  const [open, setOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  const allTokens = Object.values(tokens);
-  
-  // Filter tokens based on search term
-  const filteredTokens = allTokens.filter(token => 
-    token.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    token.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    token.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Sort tokens by popularity and relevance
-  const sortedTokens = filteredTokens.sort((a, b) => {
-    // Priority tokens appear first
-    const priorityTokens = ['ETH', 'WETH', 'USDC', 'USDT', 'DAI', 'WBTC', 'LINK', 'UNI'];
-    const aPriority = priorityTokens.indexOf(a.symbol);
-    const bPriority = priorityTokens.indexOf(b.symbol);
-    
-    if (aPriority !== -1 && bPriority !== -1) {
-      return aPriority - bPriority;
-    }
-    if (aPriority !== -1) return -1;
-    if (bPriority !== -1) return 1;
-    
-    return a.symbol.localeCompare(b.symbol);
-  });
-
-  const handleTokenSelect = (token: OneInchTokenInfo) => {
-    onChange(token);
-    setOpen(false);
-    setSearchTerm('');
-  };
-
-  const isPriority = (symbol: string) => {
-    return ['ETH', 'WETH', 'USDC', 'USDT', 'DAI', 'WBTC'].includes(symbol);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
-          className="w-full h-auto p-4 justify-start hover:bg-accent/50 transition-colors"
-        >
-          {value ? (
-            <div className="flex items-center space-x-3 w-full">
-              <div className="relative">
-                {value.logoURI ? (
-                  <img 
-                    src={value.logoURI} 
-                    alt={value.symbol}
-                    className="w-8 h-8 rounded-full ring-2 ring-background shadow-sm"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">
-                      {value.symbol.slice(0, 2)}
-                    </span>
-                  </div>
-                )}
-                {isPriority(value.symbol) && (
-                  <Star className="absolute -top-1 -right-1 w-3 h-3 text-yellow-500 fill-current" />
-                )}
-              </div>
-              <div className="flex-1 text-left">
-                <div className="font-semibold text-base">{value.symbol}</div>
-                <div className="text-sm text-muted-foreground truncate max-w-[140px]">
-                  {value.name}
-                </div>
-              </div>
-              <div className="flex items-center space-x-1 text-muted-foreground">
-                <Wallet className="w-4 h-4" />
-                <span className="text-xs">Select</span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-3 w-full text-muted-foreground">
-              <div className="w-8 h-8 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                <Plus className="w-4 h-4" />
-              </div>
-              <div className="flex-1 text-left">
-                <div className="font-medium">Select {label} token</div>
-                <div className="text-sm">Choose from {allTokens.length} tokens</div>
-              </div>
-            </div>
-          )}
-        </Button>
-      </DialogTrigger>
-      
-      <DialogContent className="max-w-md max-h-[600px] p-0">
-        <DialogHeader className="p-6 pb-4">
-          <DialogTitle className="flex items-center space-x-2">
-            <span>Select {label} token</span>
-            <Badge variant="secondary" className="text-xs">
-              {filteredTokens.length} available
-            </Badge>
-          </DialogTitle>
-        </DialogHeader>
-        
-        {/* Search Input */}
-        <div className="px-6 pb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, symbol, or address..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-muted/50 border-none focus:bg-background transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* Popular Tokens */}
-        {!searchTerm && (
-          <div className="px-6 pb-4">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Popular for limit orders
-            </h4>
-            <div className="grid grid-cols-4 gap-2">
-              {sortedTokens.slice(0, 8).filter(token => isPriority(token.symbol)).map((token) => (
-                <Button
-                  key={token.address}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTokenSelect(token)}
-                  disabled={otherToken?.address === token.address}
-                  className="flex flex-col items-center p-3 h-auto hover:bg-accent/50 disabled:opacity-50"
-                >
-                  {token.logoURI ? (
-                    <img 
-                      src={token.logoURI} 
-                      alt={token.symbol}
-                      className="w-6 h-6 rounded-full mb-1"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center mb-1">
-                      <span className="text-xs font-bold text-primary">
-                        {token.symbol.slice(0, 2)}
-                      </span>
-                    </div>
-                  )}
-                  <span className="text-xs font-medium">{token.symbol}</span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Token List */}
-        <div className="flex-1 overflow-y-auto max-h-[300px] border-t">
-          {sortedTokens.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <Search className="w-8 h-8 mx-auto mb-3 opacity-50" />
-              <p className="font-medium">No tokens found</p>
-              <p className="text-sm">Try adjusting your search terms</p>
-            </div>
-          ) : (
-            <div className="space-y-1 p-2">
-              {sortedTokens.slice(0, 50).map((token) => {
-                const isDisabled = otherToken?.address === token.address;
-                const isSelected = value?.address === token.address;
-                
-                return (
-                  <button
-                    key={token.address}
-                    onClick={() => !isDisabled && handleTokenSelect(token)}
-                    disabled={isDisabled}
-                    className={`
-                      w-full p-3 rounded-lg flex items-center space-x-3 text-left 
-                      transition-all duration-200 hover:bg-accent/50
-                      ${isSelected ? 'bg-primary/10 border-2 border-primary/20' : ''}
-                      ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                    `}
-                  >
-                    <div className="relative">
-                      {token.logoURI ? (
-                        <img 
-                          src={token.logoURI} 
-                          alt={token.symbol}
-                          className="w-10 h-10 rounded-full ring-2 ring-background shadow-sm"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-bold text-primary">
-                            {token.symbol.slice(0, 2)}
-                          </span>
-                        </div>
-                      )}
-                      {isPriority(token.symbol) && (
-                        <Star className="absolute -top-1 -right-1 w-3 h-3 text-yellow-500 fill-current" />
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-base">{token.symbol}</span>
-                        {isPriority(token.symbol) && (
-                          <Badge variant="secondary" className="text-xs px-2 py-0">
-                            Popular
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">
-                        {token.name}
-                      </div>
-                    </div>
-                    
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {token.address.slice(0, 6)}...{token.address.slice(-4)}
-                      </div>
-                      {isDisabled && (
-                        <Badge variant="outline" className="text-xs mt-1">
-                          Selected above
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        
-        {/* Footer */}
-        <div className="p-4 border-t bg-muted/30">
-          <p className="text-xs text-muted-foreground text-center">
-            {searchTerm ? `${filteredTokens.length} results` : `${Math.min(allTokens.length, 50)} tokens shown`} • 
-            Powered by 1inch
-          </p>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+interface ChartData {
+  data: ChartDataPoint[];
 }
 
-export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
+export function LimitOrderInterface({ className, makerToken, takerToken, setMakerToken, setTakerToken, tokens, setTokens, balances }: LimitOrderInterfaceProps) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
   const { signTypedData, isPending: isSigningPending } = useSignTypedData();
 
   // State management
-  const [tokens, setTokens] = useState<Record<string, OneInchTokenInfo>>({});
-  const [makerToken, setMakerToken] = useState<OneInchTokenInfo | null>(null);
-  const [takerToken, setTakerToken] = useState<OneInchTokenInfo | null>(null);
   const [makerAmount, setMakerAmount] = useState('');
   const [takerAmount, setTakerAmount] = useState('');
   const [orderType, setOrderType] = useState<'limit' | 'twap' | 'stop'>('limit');
@@ -313,6 +78,9 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
   const [error, setError] = useState<string | null>(null);
   const [currentOrder, setCurrentOrder] = useState<OrderData | null>(null);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<ChartData | undefined>();
+  const [isChartLoading, setIsChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
 
   currentOrder && console.log('currentOrder', currentOrder);
   // Current chain validation
@@ -328,46 +96,6 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
     10: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Optimism
     8453: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828', // Base
   };
-
-  // Load supported tokens for current chain
-  useEffect(() => {
-    async function loadTokens() {
-      if (!isValidChain) return;
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        console.log('Loading tokens for limit orders...');
-        
-        const tokensData = await oneInchService.getTokens(currentChainId);
-        const tokens = tokensData.tokens || tokensData;
-        
-        if (typeof tokens === 'object' && tokens !== null) {
-          setTokens(tokens as unknown as Record<string, OneInchTokenInfo>);
-        }
-
-        // Set default tokens
-        const ethToken = Object.values(tokens).find(t => 
-          t.symbol === 'ETH' || t.symbol === 'WETH' || 
-          t.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
-        );
-        const usdcToken = Object.values(tokens).find(t => 
-          t.symbol === 'USDC'
-        );
-
-        if (ethToken) setMakerToken(ethToken);
-        if (usdcToken) setTakerToken(usdcToken);
-
-      } catch (err: any) {
-        console.error('Error loading tokens:', err);
-        setError(`Failed to load tokens: ${err.message}`);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadTokens();
-  }, [currentChainId, isValidChain]);
 
   // Load active orders for current user
   useEffect(() => {
@@ -385,11 +113,36 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
     loadActiveOrders();
   }, [address, currentChainId, isValidChain]);
 
+  // Fetch chart data when tokens change
+  useEffect(() => {
+    const fetchChartData = async () => {
+      if (!makerToken || !takerToken) return;
+
+      setIsChartLoading(true);
+      setChartError(null);
+
+      console.log("fetcing chart data");
+      try {
+        const response = await fetch(`/api/1inch/charts?fromToken=${makerToken.address}&toToken=${takerToken.address}&chainId=${currentChainId}`);
+        if (!response.ok) throw new Error('Failed to fetch chart data');
+
+        const data = await response.json();
+        setChartData(data);
+      } catch (error) {
+        setChartError(error instanceof Error ? error.message : 'Failed to load chart data');
+      } finally {
+        setIsChartLoading(false);
+      }
+    };
+
+    fetchChartData();
+  }, [makerToken, takerToken]);
+
   // Generate order salt (unique identifier)
   const generateOrderSalt = useCallback(() => {
     const timestamp = Math.floor(Date.now() / 1000);
     const random = Math.floor(Math.random() * 1000000);
-    
+
     // Create a simple hash using timestamp and random number
     const saltString = `${timestamp}-${random}`;
     return keccak256(`0x${Buffer.from(saltString).toString('hex')}` as `0x${string}`);
@@ -402,17 +155,17 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
     // Bit 1: allowPriceImprovement  
     // Bit 2-4: expiration type
     // Bit 5-255: expiration timestamp
-    
+
     const allowPartialFill = 1; // Allow partial fills
     const allowPriceImprovement = 1; // Allow price improvement
     const expirationTimestamp = Math.floor(Date.now() / 1000) + expiration;
-    
+
     // Pack traits into a single uint256
     let traits = BigInt(0);
     traits |= BigInt(allowPartialFill);
     traits |= BigInt(allowPriceImprovement) << BigInt(1);
     traits |= BigInt(expirationTimestamp) << BigInt(5);
-    
+
     return `0x${traits.toString(16).padStart(64, '0')}`;
   }, []);
 
@@ -424,7 +177,7 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
 
     const salt = generateOrderSalt();
     const makerTraits = generateMakerTraits(parseInt(expiration));
-    
+
     const order: LimitOrder = {
       salt,
       maker: address,
@@ -473,7 +226,7 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
     }
 
     const { domain, types } = generateOrderHash(order);
-    
+
     setCurrentOrder(prev => prev ? { ...prev, status: 'signing' } : null);
 
     try {
@@ -520,7 +273,7 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
       });
 
       setCurrentOrder(prev => prev ? { ...prev, status: 'submitted' } : null);
-      
+
       toast({
         title: 'Limit Order Created',
         description: `Order submitted successfully!`,
@@ -572,7 +325,7 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
       console.error('Error creating limit order:', err);
       setError(err.message || 'Failed to create limit order');
       setCurrentOrder(prev => prev ? { ...prev, status: 'error' } : null);
-      
+
       toast({
         title: 'Order Creation Failed',
         description: err.message || 'Failed to create limit order',
@@ -588,7 +341,7 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
     try {
       setIsLoading(true);
       await oneInchService.cancelLimitOrder(currentChainId, orderHash);
-      
+
       toast({
         title: 'Order Cancelled',
         description: 'Limit order has been cancelled successfully',
@@ -653,199 +406,235 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
         </TabsList>
 
         <TabsContent value="create">
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span>Create Limit Order</span>
-                  <Badge variant="outline" className="text-xs">
-                    {oneInchService.getChainName(currentChainId)}
-                  </Badge>
-                </div>
-                <Badge variant="secondary" className="flex items-center space-x-1">
-                  <Target className="h-3 w-3" />
-                  <span>{orderType.toUpperCase()}</span>
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent className="space-y-6">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Order Type Selection */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-muted-foreground">Order Type</Label>
-                <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
-                  <SelectTrigger className="h-12 bg-muted/30">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="limit">
-                      <div className="flex items-center space-x-2">
-                        <Target className="w-4 h-4" />
-                        <div>
-                          <div className="font-medium">Limit Order</div>
-                          <div className="text-xs text-muted-foreground">Execute at specific price</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="twap">
-                      <div className="flex items-center space-x-2">
-                        <TrendingUp className="w-4 h-4" />
-                        <div>
-                          <div className="font-medium">TWAP Order</div>
-                          <div className="text-xs text-muted-foreground">Time-weighted average price</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="stop">
-                      <div className="flex items-center space-x-2">
-                        <AlertCircle className="w-4 h-4" />
-                        <div>
-                          <div className="font-medium">Stop Loss</div>
-                          <div className="text-xs text-muted-foreground">Trigger at stop price</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Maker Token */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-muted-foreground">You Pay (Maker Asset)</Label>
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    <Wallet className="w-3 h-3 mr-1" />
-                    Balance: 0.00
-                  </div>
-                </div>
-                <TokenSelector
-                  value={makerToken}
-                  onChange={setMakerToken}
-                  label="maker"
-                  tokens={tokens}
-                  otherToken={takerToken}
-                />
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={makerAmount}
-                  onChange={(e) => setMakerAmount(e.target.value)}
-                  className="text-lg h-12 text-right bg-muted/30 border-muted"
-                  step="any"
-                />
-              </div>
-
-              {/* Taker Token */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-muted-foreground">You Receive (Taker Asset)</Label>
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    <Wallet className="w-3 h-3 mr-1" />
-                    Balance: 0.00
-                  </div>
-                </div>
-                <TokenSelector
-                  value={takerToken}
-                  onChange={setTakerToken}
-                  label="taker"
-                  tokens={tokens}
-                  otherToken={makerToken}
-                />
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={takerAmount}
-                  onChange={(e) => setTakerAmount(e.target.value)}
-                  className="text-lg h-12 text-right bg-muted/30 border-muted"
-                  step="any"
-                />
-              </div>
-
-              {/* Expiration */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-muted-foreground">Expiration</Label>
-                <Select value={expiration} onValueChange={setExpiration}>
-                  <SelectTrigger className="h-12 bg-muted/30">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3600">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>1 Hour</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="86400">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>1 Day</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="604800">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>1 Week</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="2592000">
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>1 Month</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Order Status */}
-              {currentOrder && (
-
-                <div className="p-4 bg-muted/50 rounded-lg border space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Order Status:</span>
-                    <Badge variant={currentOrder.status === 'submitted' ? 'default' : 'secondary'} className="flex items-center space-x-1">
-                      {currentOrder.status === 'signing' && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {currentOrder.status === 'submitting' && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {currentOrder.status === 'submitted' && <CheckCircle className="h-3 w-3" />}
-                      <span>{currentOrder.status.charAt(0).toUpperCase() + currentOrder.status.slice(1)}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Price Chart Section */}
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center justify-between">
+                  <span>Price Chart</span>
+                  {makerToken && takerToken && (
+                    <Badge variant="outline" className="text-xs">
+                      {makerToken.symbol}/{takerToken.symbol}
                     </Badge>
-                  </div>
-                  {currentOrder.orderHash && (
-                    <div className="text-sm text-muted-foreground font-mono">
-                      Order Hash: {currentOrder.orderHash.slice(0, 20)}...
-                    </div>
                   )}
-                </div>
-              )}
-
-              {/* Create Order Button */}
-              <Button
-                onClick={handleCreateOrder}
-                disabled={!makerToken || !takerToken || !makerAmount || !takerAmount || isLoading || isSigningPending}
-                className="w-full h-12 text-base font-medium"
-                size="lg"
-              >
-                {isLoading || isSigningPending ? (
-                  <div className="flex items-center space-x-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{isSigningPending ? 'Sign in Wallet...' : 'Creating Order...'}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isChartLoading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : chartError ? (
+                  <div className="h-full flex items-center justify-center">
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{chartError}</AlertDescription>
+                    </Alert>
+                  </div>
+                ) : !makerToken || !takerToken ? (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-muted-foreground">Select tokens to view price chart</p>
                   </div>
                 ) : (
+                  <PriceChart data={chartData} fromToken={makerToken.symbol} toToken={takerToken.symbol} />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Order Creation Form */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Target className="h-4 w-4" />
                     <span>Create Limit Order</span>
+                    <Badge variant="outline" className="text-xs">
+                      {oneInchService.getChainName(currentChainId)}
+                    </Badge>
+                  </div>
+                  <Badge variant="secondary" className="flex items-center space-x-1">
+                    <Target className="h-3 w-3" />
+                    <span>{orderType.toUpperCase()}</span>
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Order Type Selection */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-muted-foreground">Order Type</Label>
+                  <Select value={orderType} onValueChange={(value: any) => setOrderType(value)}>
+                    <SelectTrigger className="bg-muted/30">
+                      <SelectValue className='flex gap-4' />
+                    </SelectTrigger>
+                    <SelectContent className='bg-white'>
+                      <SelectItem value="limit">
+                        <div className="flex items-center space-x-2">
+                          <Target className="w-4 h-4" />
+                          <div>
+                            <div className="font-medium text-left">Limit Order</div>
+                            <div className="text-xs text-muted-foreground">Execute at specific price</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="twap">
+                        <div className="flex items-center space-x-2">
+                          <TrendingUp className="w-4 h-4" />
+                          <div>
+                            <div className="font-medium">TWAP Order</div>
+                            <div className="text-xs text-muted-foreground">Time-weighted average price</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="stop">
+                        <div className="flex items-center space-x-2">
+                          <AlertCircle className="w-4 h-4" />
+                          <div>
+                            <div className="font-medium">Stop Loss</div>
+                            <div className="text-xs text-muted-foreground">Trigger at stop price</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Maker Token */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-muted-foreground">You Pay (Maker Asset)</Label>
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Wallet className="w-3 h-3 mr-1" />
+                      Balance: {balances[makerToken.address] || '0.00'}
+                    </div>
+                  </div>
+                  <TokenSelector
+                    value={makerToken}
+                    onChange={setMakerToken}
+                    label="maker"
+                    tokens={tokens}
+                    otherToken={takerToken}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="0.0"
+                    value={makerAmount}
+                    onChange={(e) => setMakerAmount(e.target.value)}
+                    className="text-lg h-12 text-right bg-muted/30 border-muted"
+                    step="any"
+                  />
+                </div>
+
+                {/* Taker Token */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-muted-foreground">You Receive (Taker Asset)</Label>
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Wallet className="w-3 h-3 mr-1" />
+                      Balance: {balances[takerToken.address] || '0.00'}
+                    </div>
+                  </div>
+                  <TokenSelector
+                    value={takerToken}
+                    onChange={setTakerToken}
+                    label="taker"
+                    tokens={tokens}
+                    otherToken={makerToken}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="0.0"
+                    value={takerAmount}
+                    onChange={(e) => setTakerAmount(e.target.value)}
+                    className="text-lg h-12 text-right bg-muted/30 border-muted"
+                    step="any"
+                  />
+                </div>
+
+                {/* Expiration */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-muted-foreground">Expiration</Label>
+                  <Select value={expiration} onValueChange={setExpiration}>
+                    <SelectTrigger className="h-12 bg-muted/30">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3600">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>1 Hour</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="86400">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>1 Day</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="604800">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>1 Week</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="2592000">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>1 Month</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Order Status */}
+                {currentOrder && (
+                  <div className="p-4 bg-muted/50 rounded-lg border space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Order Status:</span>
+                      <Badge variant={currentOrder.status === 'submitted' ? 'default' : 'secondary'} className="flex items-center space-x-1">
+                        {currentOrder.status === 'signing' && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {currentOrder.status === 'submitting' && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {currentOrder.status === 'submitted' && <CheckCircle className="h-3 w-3" />}
+                        <span>{currentOrder.status.charAt(0).toUpperCase() + currentOrder.status.slice(1)}</span>
+                      </Badge>
+                    </div>
+                    {currentOrder.orderHash && (
+                      <div className="text-sm text-muted-foreground font-mono">
+                        Order Hash: {currentOrder.orderHash.slice(0, 20)}...
+                      </div>
+                    )}
                   </div>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
+
+                {/* Create Order Button */}
+                <Button
+                  onClick={handleCreateOrder}
+                  disabled={!makerToken || !takerToken || !makerAmount || !takerAmount || isLoading || isSigningPending}
+                  className="w-full h-12 text-base font-medium"
+                  size="lg"
+                >
+                  {isLoading || isSigningPending ? (
+                    <div className="flex items-center space-x-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{isSigningPending ? 'Sign in Wallet...' : 'Creating Order...'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <Target className="h-4 w-4" />
+                      <span>Create Limit Order</span>
+                    </div>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="orders">
@@ -887,15 +676,15 @@ export function LimitOrderInterface({ className }: LimitOrderInterfaceProps) {
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <div className="font-medium text-base">
-                              {order.order?.makerAsset} → {order.order?.takerAsset}
+                              {getTokenName(order.data?.makerAsset, tokens)} → {getTokenName(order.data?.takerAsset, tokens)}
                             </div>
                             <Badge variant="outline" className="text-xs">
                               Limit
                             </Badge>
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            Pay: {formatUnits(BigInt(order.order?.makingAmount || 0), 18)} • 
-                            Receive: {formatUnits(BigInt(order.order?.takingAmount || 0), 18)}
+                            Pay: {formatUnits(BigInt(order.data?.makingAmount || 0), 18)} {getTokenName(order.data?.makerAsset, tokens)} •
+                            Receive: {formatUnits(BigInt(order.data?.takingAmount || 0), 18)} {getTokenName(order.data?.takerAsset, tokens)}
                           </div>
                           <div className="text-xs text-muted-foreground font-mono">
                             Hash: {order.orderHash?.slice(0, 20)}...

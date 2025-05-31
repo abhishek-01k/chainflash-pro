@@ -31,18 +31,18 @@ export async function GET(
         }
 
         // Special validation for Base (8453) - check if orderbook is available
-        if (chainId === '8453') {
-            console.log('Warning: Using Base (8453) for orderbook operations - may have limited support');
-            return NextResponse.json(
-                {
-                    error: 'Base chain orderbook may not be available',
-                    description: 'Base (8453) may not support orderbook operations. Please try using Ethereum mainnet (chainId: 1) for testing.',
-                    statusCode: 400,
-                    suggestion: 'Switch to Ethereum mainnet for orderbook operations'
-                },
-                { status: 400 }
-            );
-        }
+        // if (chainId === '8453') {
+        //     console.log('Warning: Using Base (8453) for orderbook operations - may have limited support');
+        //     return NextResponse.json(
+        //         {
+        //             error: 'Base chain orderbook may not be available',
+        //             description: 'Base (8453) may not support orderbook operations. Please try using Ethereum mainnet (chainId: 1) for testing.',
+        //             statusCode: 400,
+        //             suggestion: 'Switch to Ethereum mainnet for orderbook operations'
+        //         },
+        //         { status: 400 }
+        //     );
+        // }
 
         // Validate maker address
         if (!maker || !maker.match(/^0x[a-fA-F0-9]{40}$/)) {
@@ -59,7 +59,7 @@ export async function GET(
         // Validate pagination parameters
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
-        
+
         if (isNaN(pageNum) || pageNum < 1) {
             return NextResponse.json(
                 {
@@ -83,14 +83,14 @@ export async function GET(
         }
 
         // Make request to 1inch Orderbook API - CORRECTED URL STRUCTURE
-        const apiUrl = `https://api.1inch.dev/v4.0/${chainId}/limit-order/order/maker/${maker}`;
+        const apiUrl = `https://api.1inch.dev/orderbook/v4.0/${chainId}/address/${maker}`;
         const apiParams = new URLSearchParams({
             page: pageNum.toString(),
             limit: limitNum.toString(),
         });
 
         const fullUrl = `${apiUrl}?${apiParams}`;
-        
+
         console.log('Fetching orders by maker:', {
             chainId,
             maker: `${maker.slice(0, 6)}...${maker.slice(-4)}`,
@@ -108,7 +108,12 @@ export async function GET(
             },
         });
 
+        console.log("response", response);
+
         const data = await response.json();
+
+        console.log("data", data);
+
 
         if (!response.ok) {
             console.error('1inch Orderbook Orders API Error:', {
@@ -139,7 +144,7 @@ export async function GET(
 
     } catch (error) {
         console.error('Orderbook Orders API Error:', error);
-        
+
         return NextResponse.json(
             {
                 error: 'Internal server error',

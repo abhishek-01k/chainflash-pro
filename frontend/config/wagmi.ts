@@ -40,21 +40,6 @@ const chains = [
       public: { http: ['https://polygon.publicnode.com'] },
     },
   },
-  // Testnets
-  {
-    ...sepolia,
-    rpcUrls: {
-      default: { http: [`https://eth-sepolia.g.alchemy.com/v2/${alchemyApiKey}`] },
-      public: { http: ['https://ethereum-sepolia.publicnode.com'] },
-    },
-  },
-  {
-    ...arbitrumSepolia,
-    rpcUrls: {
-      default: { http: [`https://arb-sepolia.g.alchemy.com/v2/${alchemyApiKey}`] },
-      public: { http: ['https://arbitrum-sepolia.publicnode.com'] },
-    },
-  },
   {
     ...base,
     rpcUrls: {

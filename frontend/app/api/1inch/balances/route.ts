@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
+
     // Required parameters
     const chainId = searchParams.get('chainId') || '1'; // Default to Ethereum
     const walletAddress = searchParams.get('walletAddress');
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Validate required parameters
     if (!walletAddress) {
       return NextResponse.json(
-        { 
+        {
           error: 'Missing required parameters',
           description: 'walletAddress is required',
           statusCode: 400
@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Make request to 1inch Balance API
-    const apiUrl = `https://api.1inch.dev/balance/v1.2/${chainId}/${walletAddress}`;
-    
+    const apiUrl = `https://api.1inch.dev/balance/v1.2/${chainId}/balances/${walletAddress}`;
+
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -63,6 +63,9 @@ export async function GET(request: NextRequest) {
     });
 
     const data = await response.json();
+
+    console.log("Data", data);;
+
 
     // Handle 1inch API errors
     if (!response.ok) {
@@ -108,7 +111,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Balances API Error:', error);
-    
+
     return NextResponse.json(
       {
         error: 'Internal server error',
