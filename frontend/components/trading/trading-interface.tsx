@@ -340,6 +340,104 @@ export function TradingInterface() {
         </CardTitle>
       </CardHeader>
       <CardContent>
+
+        <div className='flex flex-col gap-4'>
+          {/* From Token */}
+          <div className="space-y-2">
+            <Label>From</Label>
+            <div className="flex gap-2">
+              <Select
+                value={formData.fromToken.address}
+                onValueChange={(address) => {
+                  const token = BASE_TOKENS.find(t => t.address === address);
+                  if (token) setFormData({ ...formData, fromToken: token });
+                }}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className='bg-gray-800 text-white' >
+                  {BASE_TOKENS.map((token) => (
+                    <SelectItem
+                      className='py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer'
+                      key={token.address}
+                      value={token.address}
+                    >
+                      <Image src={token.logoURI} width={20} height={20} alt={token.name} />
+                      {token.symbol}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="number"
+                className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+                placeholder="0.0"
+                value={formData.fromAmount}
+                onChange={(e) =>
+                  setFormData({ ...formData, fromAmount: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Swap Button */}
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={swapTokens}
+              className="rounded-full"
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* To Token */}
+          <div className="space-y-2">
+            <Label>To</Label>
+            <div className="flex gap-2">
+              <Select
+                value={formData.toToken.address}
+                onValueChange={(address) => {
+                  const token = BASE_TOKENS.find(t => t.address === address);
+                  if (token) setFormData({ ...formData, toToken: token });
+                }}
+              >
+                <SelectTrigger className="flex-1 h-12">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className='bg-gray-800 text-white' >
+                  {BASE_TOKENS.map((token) => (
+                    <SelectItem
+                      key={token.address}
+                      value={token.address}
+                      className="flex items-center gap-2 focus:bg-accent focus:text-accent-foreground py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Image
+                          src={token.logoURI}
+                          width={24}
+                          height={24}
+                          alt={token.name}
+                          className="rounded-full"
+                        />
+                        <span>{token.symbol}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="text"
+                placeholder="0.0"
+                value={quote ? (Number(quote.dstAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
+                readOnly
+                className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+              />
+            </div>
+          </div>
+        </div>
         <Tabs
           value={formData.orderType}
           onValueChange={(value) => setFormData({
@@ -347,15 +445,35 @@ export function TradingInterface() {
             orderType: value as any
           })}
         >
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="market">Market</TabsTrigger>
-            <TabsTrigger value="limit">Limit</TabsTrigger>
-            <TabsTrigger value="twap">TWAP</TabsTrigger>
-            <TabsTrigger value="options">Options</TabsTrigger>
+          <TabsList className="mt-8 grid w-full grid-cols-4 p-1 backdrop-blur-sm">
+            <TabsTrigger
+              value="market"
+              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
+            >
+              <span className="relative z-10">Market</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="limit"
+              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
+            >
+              <span className="relative z-10">Limit</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="twap"
+              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
+            >
+              <span className="relative z-10">TWAP</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="options"
+              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
+            >
+              <span className="relative z-10">Options</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="market" className="space-y-4">
-            <div className="space-y-4">
+            <div className="space-y-4 flex flex-col justify-center items-center">
               {/* State Channel Toggle */}
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2">
@@ -371,102 +489,6 @@ export function TradingInterface() {
                     setFormData({ ...formData, useStateChannel: checked })
                   }
                 />
-              </div>
-
-              {/* From Token */}
-              <div className="space-y-2">
-                <Label>From</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.fromToken.address}
-                    onValueChange={(address) => {
-                      const token = BASE_TOKENS.find(t => t.address === address);
-                      if (token) setFormData({ ...formData, fromToken: token });
-                    }}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className='bg-gray-800 text-white' >
-                      {BASE_TOKENS.map((token) => (
-                        <SelectItem
-                          className='py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer'
-                          key={token.address}
-                          value={token.address}
-                        >
-                          <Image src={token.logoURI} width={20} height={20} alt={token.name} />
-                          {token.symbol}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
-                    placeholder="0.0"
-                    value={formData.fromAmount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fromAmount: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Swap Button */}
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={swapTokens}
-                  className="rounded-full"
-                >
-                  <ArrowUpDown className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* To Token */}
-              <div className="space-y-2">
-                <Label>To</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.toToken.address}
-                    onValueChange={(address) => {
-                      const token = BASE_TOKENS.find(t => t.address === address);
-                      if (token) setFormData({ ...formData, toToken: token });
-                    }}
-                  >
-                    <SelectTrigger className="flex-1 h-12">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className='bg-gray-800 text-white' >
-                      {BASE_TOKENS.map((token) => (
-                        <SelectItem
-                          key={token.address}
-                          value={token.address}
-                          className="flex items-center gap-2 focus:bg-accent focus:text-accent-foreground py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Image
-                              src={token.logoURI}
-                              width={24}
-                              height={24}
-                              alt={token.name}
-                              className="rounded-full"
-                            />
-                            <span>{token.symbol}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="text"
-                    placeholder="0.0"
-                    value={quote ? (Number(quote.dstAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
-                    readOnly
-                    className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
-                  />
-                </div>
               </div>
 
               {/* Quote Display */}
@@ -491,8 +513,8 @@ export function TradingInterface() {
               <Button
                 onClick={handleExecuteTrade}
                 disabled={!quote || isLoading}
-                className="w-full"
                 size="lg"
+                variant="default"
               >
                 {isLoading ? (
                   'Processing...'

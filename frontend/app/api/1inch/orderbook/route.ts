@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         // Validate required parameters
         if (!order || !signature) {
             return NextResponse.json(
-                { 
+                {
                     error: 'Missing required parameters',
                     description: 'order and signature are required',
                     statusCode: 400
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
         // Validate order structure
         const requiredOrderFields = ['salt', 'maker', 'receiver', 'makerAsset', 'takerAsset', 'makingAmount', 'takingAmount', 'makerTraits'];
         const missingFields = requiredOrderFields.filter(field => !order[field]);
-        
+
         if (missingFields.length > 0) {
             return NextResponse.json(
                 {
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
         // Make request to 1inch Orderbook API
         const apiUrl = `https://api.1inch.dev/orderbook/v4.0/${chainId}/order`;
-        
+
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -115,13 +115,76 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error('Orderbook API Error:', error);
-        
+
         return NextResponse.json(
             {
                 error: 'Internal server error',
                 description: error instanceof Error ? error.message : 'Unknown error occurred',
                 statusCode: 500
             },
+            { status: 500 }
+        );
+    }
+}
+
+export async function GET(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+
+        const makerToken = searchParams.get('makerToken');
+        const takerToken = searchParams.get('takerToken');
+        const makingAmount = searchParams.get('makingAmount');
+        const takingAmount = searchParams.get('takingAmount');
+        const expiration = searchParams.get('expiration');
+        const makerAddress = searchParams.get('makerAddress');
+        const chainId = searchParams.get('chainId') || '8453'; // Default to Base chain
+
+        // Validate required parameters
+        if (!makerToken || !takerToken || !makingAmount || !takingAmount || !makerAddress) {
+            return NextResponse.json(
+                {
+                    error: 'Missing required parameters',
+                    required: ['makerToken', 'takerToken', 'makingAmount', 'takingAmount', 'makerAddress']
+                },
+                { status: 400 }
+            );
+        }
+
+        const ONEINCH_API_URL = `https://api.1inch.dev`;
+
+        const response = await fetch(
+            `${ONEINCH_API_URL}/orderbook/v4.0/${chainId}/build?` + new URLSearchParams({
+                makerToken,
+                takerToken,
+                makingAmount,
+                takingAmount,
+                expiration: expiration || '',
+                makerAddress
+            }),
+            {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${process.env.ONEINCH_API_KEY}`,
+                    'accept': 'application/json',
+                    'content-type': 'application/json',
+                },
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            return NextResponse.json(
+                { error: error.message || 'Failed to fetch order' },
+                { status: response.status }
+            );
+        }
+
+        const data = await response.json();
+        return NextResponse.json(data);
+    } catch (error) {
+        console.error('Error fetching order:', error);
+        return NextResponse.json(
+            { error: 'Internal server error' },
             { status: 500 }
         );
     }
