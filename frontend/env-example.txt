@@ -3,24 +3,25 @@ NEXT_PUBLIC_APP_NAME="ChainFlash Pro"
 NEXT_PUBLIC_APP_DESCRIPTION="Cross-Chain State Channel Trading Platform"
 
 # Wallet & Web3 Configuration
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="your_wallet_connect_project_id"
-NEXT_PUBLIC_ALCHEMY_API_KEY="your_alchemy_api_key"
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="your-wallet-connect-project-id"
+NEXT_PUBLIC_ALCHEMY_API_KEY="your-alchemy-api-key"
 
 # 1inch Configuration
-NEXT_PUBLIC_1INCH_API_KEY="your_1inch_api_key"
+NEXT_PUBLIC_1INCH_API_KEY="your-1inch-api-key-here"
 NEXT_PUBLIC_1INCH_BASE_URL="https://api.1inch.dev"
 
 # Pyth Network Configuration
 NEXT_PUBLIC_PYTH_HERMES_ENDPOINT="https://hermes.pyth.network"
-NEXT_PUBLIC_PYTH_PRICE_SERVICE_ENDPOINT="https://xc-mainnet.pyth.network"
+NEXT_PUBLIC_PYTH_PRICE_SERVICE_ENDPOINT="https://pyth.network/api"
 
 # Nitrolite Configuration
-NITROLITE_CUSTODY_ADDRESS="0x0000000000000000000000000000000000000000"
-NITROLITE_ADJUDICATOR_ADDRESS="0x0000000000000000000000000000000000000000"
-NEXT_PUBLIC_NITROLITE_RPC_URL="wss://nitrolite-rpc.yellow.org"
+NITROLITE_CUSTODY_ADDRESS="0x1234567890123456789012345678901234567890"
+NITROLITE_ADJUDICATOR_ADDRESS="0x1234567890123456789012345678901234567890"
+NEXT_PUBLIC_NITROLITE_RPC_URL="https://rpc.nitrolite.org"
 
 # Bitcoin Configuration (for cross-chain)
-BITCOIN_TESTNET_RPC_URL="https://bitcoin-testnet-rpc.example.com"
+BITCOIN_TESTNET_RPC_URL="https://blockstream.info/testnet/api"
+BITCOIN_MAINNET_RPC_URL="https://blockstream.info/api"
 
 # Network Configuration
 NEXT_PUBLIC_ETHEREUM_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/"
@@ -29,4 +30,28 @@ NEXT_PUBLIC_OPTIMISM_RPC_URL="https://opt-mainnet.g.alchemy.com/v2/"
 NEXT_PUBLIC_POLYGON_RPC_URL="https://polygon-mainnet.g.alchemy.com/v2/"
 
 # Analytics & Monitoring
-NEXT_PUBLIC_ANALYTICS_ID="your_analytics_id" 
+NEXT_PUBLIC_ANALYTICS_ID="your-analytics-id"
+SENTRY_DSN="your-sentry-dsn"
+
+# Application Configuration
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+NEXT_PUBLIC_BACKEND_URL="http://localhost:3001"
+
+# Database Configuration (if using)
+DATABASE_URL="postgresql://username:password@localhost:5432/chainflash"
+
+# Redis Configuration (for caching)
+REDIS_URL="redis://localhost:6379"
+
+# Security
+NEXTAUTH_SECRET="your-nextauth-secret"
+NEXTAUTH_URL="http://localhost:3000"
+
+# API Rate Limiting
+API_RATE_LIMIT_MAX="100"
+API_RATE_LIMIT_WINDOW="900000"
+
+# Feature Flags
+NEXT_PUBLIC_ENABLE_TESTNET="true"
+NEXT_PUBLIC_ENABLE_BITCOIN_BRIDGE="true"
+NEXT_PUBLIC_ENABLE_STATE_CHANNELS="true" 
