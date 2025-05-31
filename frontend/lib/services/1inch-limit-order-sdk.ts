@@ -155,10 +155,12 @@ export class OneInchLimitOrderSDK {
    */
   async createLimitOrder(params: CreateOrderParams): Promise<LimitOrder> {
     try {
+      console.log('Attempting to create limit order with fee info...');
+      
       const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
       const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
 
-      // Fetch fee information first
+      // Try to fetch fee information first
       console.log('Fetching fee information...');
       const feeInfo = await this.getFeeInfo(
         params.makerAsset,
@@ -199,43 +201,27 @@ export class OneInchLimitOrderSDK {
 
       return order;
     } catch (error: any) {
-      console.error('Error in createLimitOrder:', error);
-      // If the error is related to fee params, try creating without fee info
-      if (error.message && error.message.includes('feeParams')) {
-        console.log('Retrying order creation without fee info...');
-        try {
-          const expiresIn = BigInt(params.expiration || 3600);
-          const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
-
-          const makerTraits = MakerTraits.default()
-            .withExpiration(expiration)
-            .withNonce(params.salt || randBigInt(UINT_40_MAX));
-
-          if (params.allowPartialFill) {
-            makerTraits.allowPartialFills();
-          }
-
-          if (params.allowPriceImprovement) {
-            makerTraits.allowMultipleFills();
-          }
-
-          const order = await this.sdk.createOrder({
-            makerAsset: new Address(params.makerAsset),
-            takerAsset: new Address(params.takerAsset),
-            makingAmount: params.makingAmount,
-            takingAmount: params.takingAmount,
-            maker: new Address(params.maker),
-            salt: params.salt,
-            receiver: params.receiver ? new Address(params.receiver) : undefined,
-          }, makerTraits);
-
-          return order;
-        } catch (retryError) {
-          console.error('Retry also failed:', retryError);
-          throw retryError;
-        }
+      console.error('Error in createLimitOrder with fee info:', error);
+      
+      // If the error is related to fee params or whitelist, use direct method
+      if (error.message && (
+        error.message.includes('feeParams') || 
+        error.message.includes('whitelist') || 
+        error.message.includes('map is not a function')
+      )) {
+        console.log('Fee-related error detected, using direct order creation...');
+        return await this.createLimitOrderDirect(params);
       }
-      throw error;
+
+      // For other errors, try the direct method as well
+      console.log('Using direct order creation as fallback...');
+      try {
+        return await this.createLimitOrderDirect(params);
+      } catch (fallbackError) {
+        console.error('Direct method also failed:', fallbackError);
+        // If both methods fail, throw the original error
+        throw error;
+      }
     }
   }
 
