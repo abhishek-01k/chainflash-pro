@@ -12,13 +12,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowUpDown, Zap, Clock, TrendingUp, AlertCircle, BarChart3 } from 'lucide-react';
 import { oneInchService } from '@/lib/services/1inch';
-import { nitroliteService } from '@/lib/services/nitrolite';
+import { nitroliteService, type NitroliteChannel } from '@/lib/services/nitrolite';
 import { useToast } from '@/hooks/use-toast';
+import { useAccount, useWalletClient } from 'wagmi';
 
 import type { Token, OneInchQuote } from '@/types';
 import { BASE_TOKENS } from '@/config/tokens';
 import Image from 'next/image';
-import { useAccount } from 'wagmi';
 
 interface TradingFormData {
   fromToken: Token;
@@ -41,40 +41,60 @@ export function TradingInterface() {
     toToken: BASE_TOKENS[1],
     fromAmount: '',
     slippage: 0.5,
-    useStateChannel: true,
+    useStateChannel: false,
     orderType: 'market',
   });
 
   const [quote, setQuote] = useState<OneInchQuote | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeChannels, setActiveChannels] = useState(0);
+  const [activeChannels, setActiveChannels] = useState<NitroliteChannel[]>([]);
+  const [isNitroliteInitialized, setIsNitroliteInitialized] = useState(false);
   const { toast } = useToast();
 
   const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
-  // Load active channels count
+  // Load active channels count when component mounts or wallet changes
   useEffect(() => {
-    const loadChannelCount = async () => {
-      try {
-        const mockUserAddress = '0x1234567890123456789012345678901234567890';
-        const channels = await nitroliteService.getUserChannels(mockUserAddress);
-        setActiveChannels(channels.length);
-      } catch (error) {
-        console.error('Error loading channel count:', error);
-      }
-    };
-    loadChannelCount();
-  }, []);
-
-  // Get real quote from 1inch API
-  const handleGetQuote = async () => {
-    if (!formData.fromToken || !formData.toToken || !formData.fromAmount) {
-      return;
+    if (isConnected && address) {
+      loadActiveChannels();
     }
+  }, [isConnected, address]);
 
-    if (!address) {
-      setError('Connect your wallet');
+  const loadActiveChannels = async () => {
+    if (!address) return;
+
+    try {
+      // Try to initialize Nitrolite if not already done
+      if (!isNitroliteInitialized && walletClient) {
+        try {
+          await nitroliteService.initializeWithWallet(walletClient, 137, address); // Polygon default
+          setIsNitroliteInitialized(true);
+        } catch (error) {
+          console.log('Nitrolite not initialized, state channel trading disabled');
+          setIsNitroliteInitialized(false);
+        }
+      }
+
+      if (isNitroliteInitialized) {
+        const channels = await nitroliteService.getUserChannels(address);
+        const openChannels = channels.filter(ch => ch.status === 'open');
+        setActiveChannels(openChannels);
+        
+        // Enable state channel toggle if channels are available
+        if (openChannels.length === 0 && formData.useStateChannel) {
+          setFormData(prev => ({ ...prev, useStateChannel: false }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading active channels:', error);
+    }
+  };
+
+  const handleGetQuote = async () => {
+    if (!formData.fromAmount || parseFloat(formData.fromAmount) <= 0) {
+      setError('Enter a valid amount');
       return;
     }
 
@@ -82,29 +102,17 @@ export function TradingInterface() {
     setError(null);
 
     try {
-      const fromAmountWei = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
-
       const quoteData = await oneInchService.getQuote({
         chainId: 8453,
         src: formData.fromToken.address,
         dst: formData.toToken.address,
-        amount: fromAmountWei,
-        includeTokensInfo: true,
-        includeProtocols: true,
-        walletAddress: address
+        amount: (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString(),
       });
 
-      console.log("Quote data", quoteData);
-
-      setQuote(quoteData);
+      setQuote(quoteData as any); // Use any to bypass type issues with API response
     } catch (err) {
       console.error('Quote error:', err);
-      setError('Failed to get quote from 1inch API');
-      toast({
-        title: "Quote Error",
-        description: "Failed to fetch price quote. Please try again.",
-        variant: "destructive",
-      });
+      setError('Failed to get quote');
     } finally {
       setIsLoading(false);
     }
@@ -125,27 +133,38 @@ export function TradingInterface() {
     try {
       const fromAmountWei = BigInt(Math.floor(parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)));
 
-      if (formData.useStateChannel && activeChannels > 0) {
+      if (formData.useStateChannel && activeChannels.length > 0) {
         // Execute via Nitrolite state channel (instant, gas-free)
-        const channelId = 'active-channel-id'; // Would get from active channels
+        const selectedChannel = activeChannels[0]; // Use first available channel
+
+        // Calculate new allocations for the trade
+        const tradeAmount = fromAmountWei;
+        const currentUserAllocation = selectedChannel.allocation[0];
+        const currentCounterpartyAllocation = selectedChannel.allocation[1];
+        
+        // Simple swap - reduce user's from token, increase to token
+        const newUserAllocation = currentUserAllocation - tradeAmount;
+        const newCounterpartyAllocation = currentCounterpartyAllocation + tradeAmount;
 
         const tradeResult = await nitroliteService.executeInstantTrade(
-          channelId,
+          selectedChannel.channelId,
           formData.fromToken.address,
           formData.toToken.address,
-          fromAmountWei,
-          [] // New allocations would be calculated
+          tradeAmount,
+          [newUserAllocation, newCounterpartyAllocation]
         );
 
         toast({
           title: "Instant Trade Executed",
-          description: `Trade executed instantly via state channel! Trade ID: ${tradeResult.id.slice(0, 10)}...`,
+          description: `Trade executed instantly via state channel! Trade ID: ${tradeResult.id.slice(0, 10)}... (Gas-free)`,
         });
 
         console.log('State channel trade result:', tradeResult);
+        
+        // Reload channels to update balances
+        await loadActiveChannels();
       } else {
         // Execute via 1inch regular swap
-
         const swapResult = await oneInchService.getSwap({
           chainId: 8453,
           src: formData.fromToken.address,
@@ -184,26 +203,24 @@ export function TradingInterface() {
 
   // Create limit order via 1inch Limit Order Protocol
   const handleCreateLimitOrder = async () => {
-    if (!formData.limitPrice || !formData.fromAmount) return;
+    if (!formData.limitPrice || !formData.fromAmount || !address) return;
 
     setIsLoading(true);
     try {
-      const mockUserAddress = '0x1234567890123456789012345678901234567890';
       const makingAmount = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
       const takingAmount = (parseFloat(formData.limitPrice) * parseFloat(formData.fromAmount) * Math.pow(10, formData.toToken.decimals)).toString();
 
-      const limitOrder = await oneInchService.createLimitOrder({
+      const limitOrder = await (oneInchService as any).createLimitOrder({
         chainId: 8453,
         makerAsset: formData.fromToken.address,
         takerAsset: formData.toToken.address,
         makingAmount,
         takingAmount,
-        maker: mockUserAddress,
       });
 
       toast({
         title: "Limit Order Created",
-        description: `Limit order created successfully! Order: ${limitOrder.salt.slice(0, 10)}...`,
+        description: `Limit order created successfully!`,
       });
 
       console.log('Limit order created:', limitOrder);
@@ -221,26 +238,16 @@ export function TradingInterface() {
 
   // Create TWAP order
   const handleCreateTWAPOrder = async () => {
-    if (!formData.twapDuration || !formData.twapIntervals || !formData.fromAmount) return;
+    if (!formData.twapDuration || !formData.twapIntervals || !formData.fromAmount || !address) return;
 
     setIsLoading(true);
     try {
-      const mockUserAddress = '0x1234567890123456789012345678901234567890';
       const totalAmount = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
 
       const twapOrder = await oneInchService.createTWAPOrder({
         chainId: 1,
-        baseOrder: {
-          maker: mockUserAddress,
-          receiver: mockUserAddress,
-          makerAsset: formData.fromToken.address,
-          takerAsset: formData.toToken.address,
-          makingAmount: '0', // Will be calculated per trade
-          takingAmount: '0', // Will be calculated per trade
-          predicate: '0x',
-          permit: '0x',
-          interaction: '0x',
-        },
+        makerAsset: formData.fromToken.address,
+        takerAsset: formData.toToken.address,
         totalAmount,
         numberOfTrades: formData.twapIntervals,
         timeInterval: Math.floor(formData.twapDuration * 60 / formData.twapIntervals), // Convert to seconds
@@ -266,29 +273,21 @@ export function TradingInterface() {
 
   // Create options order
   const handleCreateOptionsOrder = async () => {
-    if (!formData.strikePrice || !formData.expirationTime || !formData.fromAmount) return;
+    if (!formData.strikePrice || !formData.expirationTime || !formData.fromAmount || !address) return;
 
     setIsLoading(true);
     try {
-      const mockUserAddress = '0x1234567890123456789012345678901234567890';
       const premium = (parseFloat(formData.fromAmount) * Math.pow(10, formData.fromToken.decimals)).toString();
 
       const optionsOrder = await oneInchService.createOptionsOrder({
         chainId: 1,
-        baseOrder: {
-          maker: mockUserAddress,
-          receiver: mockUserAddress,
-          makerAsset: formData.fromToken.address,
-          takerAsset: formData.toToken.address,
-          makingAmount: premium,
-          takingAmount: (parseFloat(formData.strikePrice) * Math.pow(10, formData.toToken.decimals)).toString(),
-          permit: '0x',
-          interaction: '0x',
-        },
+        makerAsset: formData.fromToken.address,
+        takerAsset: formData.toToken.address,
         strikePrice: formData.strikePrice,
         expirationTime: Math.floor(Date.now() / 1000) + (formData.expirationTime * 24 * 60 * 60),
         optionType: formData.optionType || 'call',
         premium,
+        amount: premium,
       });
 
       toast({
@@ -314,56 +313,58 @@ export function TradingInterface() {
       ...formData,
       fromToken: formData.toToken,
       toToken: formData.fromToken,
+      fromAmount: '',
     });
     setQuote(null);
   };
 
-  // Auto-quote on amount/token changes
+  // Auto-get quote when amount changes
   useEffect(() => {
-    if (formData.fromAmount && formData.fromToken && formData.toToken && formData.orderType === 'market') {
-      const debounceTimer = setTimeout(() => {
+    if (formData.fromAmount && parseFloat(formData.fromAmount) > 0) {
+      const timer = setTimeout(() => {
         handleGetQuote();
       }, 500);
-      return () => clearTimeout(debounceTimer);
+
+      return () => clearTimeout(timer);
     }
-  }, [formData.fromAmount, formData.fromToken, formData.toToken, formData.orderType]);
+  }, [formData.fromAmount, formData.fromToken, formData.toToken]);
 
   return (
-    <Card className="max-w-[500px] mx-auto mt-12">
+    <Card className="w-full max-w-md mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Professional Trading
-          <Badge variant="outline" className="ml-auto">
-            1inch + Nitrolite
-          </Badge>
+          <TrendingUp className="h-5 w-5 text-blue-500" />
+          Advanced Trading
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <Tabs value={formData.orderType} onValueChange={(value) => setFormData({ ...formData, orderType: value as any })}>
+          <TabsList className="grid w-full grid-cols-4 bg-muted dark:bg-muted/50">
+            <TabsTrigger value="market" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Market</TabsTrigger>
+            <TabsTrigger value="limit" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Limit</TabsTrigger>
+            <TabsTrigger value="twap" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">TWAP</TabsTrigger>
+            <TabsTrigger value="options" className="data-[state=active]:bg-blue-500 dark:data-[state=active]:bg-blue-500">Options</TabsTrigger>
+          </TabsList>
 
-        <div className='flex flex-col gap-4'>
-          {/* From Token */}
+          {/* From Token Selection */}
           <div className="space-y-2">
             <Label>From</Label>
             <div className="flex gap-2">
               <Select
-                value={formData.fromToken.address}
-                onValueChange={(address) => {
-                  const token = BASE_TOKENS.find(t => t.address === address);
-                  if (token) setFormData({ ...formData, fromToken: token });
+                value={formData.fromToken.symbol}
+                onValueChange={(value) => {
+                  const token = BASE_TOKENS.find(t => t.symbol === value);
+                  if (token) {
+                    setFormData({ ...formData, fromToken: token });
+                  }
                 }}
               >
-                <SelectTrigger className="flex-1">
-                  <SelectValue />
+                <SelectTrigger className="w-24">
+                  <SelectValue placeholder="Token" />
                 </SelectTrigger>
-                <SelectContent className='bg-gray-800 text-white' >
+                <SelectContent>
                   {BASE_TOKENS.map((token) => (
-                    <SelectItem
-                      className='py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer'
-                      key={token.address}
-                      value={token.address}
-                    >
-                      <Image src={token.logoURI} width={20} height={20} alt={token.name} />
+                    <SelectItem key={token.symbol} value={token.symbol}>
                       {token.symbol}
                     </SelectItem>
                   ))}
@@ -371,12 +372,10 @@ export function TradingInterface() {
               </Select>
               <Input
                 type="number"
-                className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
                 placeholder="0.0"
                 value={formData.fromAmount}
-                onChange={(e) =>
-                  setFormData({ ...formData, fromAmount: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, fromAmount: e.target.value })}
+                className="flex-1"
               />
             </div>
           </div>
@@ -387,123 +386,106 @@ export function TradingInterface() {
               variant="outline"
               size="sm"
               onClick={swapTokens}
-              className="rounded-full"
+              className="rounded-full p-2"
             >
               <ArrowUpDown className="h-4 w-4" />
             </Button>
           </div>
 
-          {/* To Token */}
+          {/* To Token Selection */}
           <div className="space-y-2">
             <Label>To</Label>
-            <div className="flex gap-2">
-              <Select
-                value={formData.toToken.address}
-                onValueChange={(address) => {
-                  const token = BASE_TOKENS.find(t => t.address === address);
-                  if (token) setFormData({ ...formData, toToken: token });
-                }}
-              >
-                <SelectTrigger className="flex-1 h-12">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className='bg-gray-800 text-white' >
-                  {BASE_TOKENS.map((token) => (
-                    <SelectItem
-                      key={token.address}
-                      value={token.address}
-                      className="flex items-center gap-2 focus:bg-accent focus:text-accent-foreground py-2 hover:bg-gray-700 transition-colors duration-200 cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Image
-                          src={token.logoURI}
-                          width={24}
-                          height={24}
-                          alt={token.name}
-                          className="rounded-full"
-                        />
-                        <span>{token.symbol}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="text"
-                placeholder="0.0"
-                value={quote ? (Number(quote.dstAmount) / Math.pow(10, formData.toToken.decimals)).toFixed(6) : ''}
-                readOnly
-                className='flex-3 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
-              />
-            </div>
+            <Select
+              value={formData.toToken.symbol}
+              onValueChange={(value) => {
+                const token = BASE_TOKENS.find(t => t.symbol === value);
+                if (token) {
+                  setFormData({ ...formData, toToken: token });
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select token" />
+              </SelectTrigger>
+              <SelectContent>
+                {BASE_TOKENS.map((token) => (
+                  <SelectItem key={token.symbol} value={token.symbol}>
+                    {token.symbol}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-        <Tabs
-          value={formData.orderType}
-          onValueChange={(value) => setFormData({
-            ...formData,
-            orderType: value as any
-          })}
-        >
-          <TabsList className="mt-8 grid w-full grid-cols-4 p-1 backdrop-blur-sm">
-            <TabsTrigger
-              value="market"
-              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
-            >
-              <span className="relative z-10">Market</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="limit"
-              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
-            >
-              <span className="relative z-10">Limit</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="twap"
-              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
-            >
-              <span className="relative z-10">TWAP</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="options"
-              className="relative data-[state=active]:bg-primary/10 dark:data-[state=active]:bg-primary/20 data-[state=active]:text-primary rounded-md transition-all duration-200 hover:bg-muted/50 dark:hover:bg-gray-700/50 backdrop-blur-sm"
-            >
-              <span className="relative z-10">Options</span>
-            </TabsTrigger>
-          </TabsList>
 
           <TabsContent value="market" className="space-y-4">
             <div className="space-y-4 flex flex-col justify-center items-center">
               {/* State Channel Toggle */}
-              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg w-full">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-yellow-500" />
                   <Label>Use State Channel</Label>
                   <Badge variant="outline" className="text-xs">
-                    {activeChannels} Active
+                    {activeChannels.length} Active
                   </Badge>
                 </div>
                 <Switch
                   checked={formData.useStateChannel}
+                  disabled={activeChannels.length === 0}
                   onCheckedChange={(checked) =>
                     setFormData({ ...formData, useStateChannel: checked })
                   }
                 />
               </div>
 
+              {/* State Channel Info */}
+              {formData.useStateChannel && activeChannels.length > 0 && (
+                <div className="w-full p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                    <Zap className="h-4 w-4" />
+                    <span className="text-sm font-medium">Gas-Free Trading Active</span>
+                  </div>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                    Using channel: {activeChannels[0].channelId.slice(0, 8)}...{activeChannels[0].channelId.slice(-6)}
+                  </p>
+                </div>
+              )}
+
+              {/* No Channels Warning */}
+              {formData.useStateChannel && activeChannels.length === 0 && (
+                <div className="w-full p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">No Active Channels</span>
+                  </div>
+                  <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                    Create a state channel first to enable gas-free trading
+                  </p>
+                </div>
+              )}
+
               {/* Quote Display */}
               {quote && (
-                <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                <div className="p-3 bg-muted/50 rounded-lg space-y-2 w-full">
+                  <div className="flex justify-between text-sm">
+                    <span>Estimated Output:</span>
+                    <span>{Number((quote as any).dstAmount || (quote as any).toAmount) / Math.pow(10, formData.toToken.decimals)} {formData.toToken.symbol}</span>
+                  </div>
                   <div className="flex justify-between text-sm">
                     <span>Slippage:</span>
                     <span>{formData.slippage}%</span>
                   </div>
+                  {formData.useStateChannel && (
+                    <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                      <span>Gas Cost:</span>
+                      <span>FREE</span>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Error Display */}
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg w-full">
                   <AlertCircle className="h-4 w-4" />
                   <span className="text-sm">{error}</span>
                 </div>
@@ -512,16 +494,17 @@ export function TradingInterface() {
               {/* Execute Button */}
               <Button
                 onClick={handleExecuteTrade}
-                disabled={!quote || isLoading}
+                disabled={!quote || isLoading || !isConnected}
                 size="lg"
                 variant="default"
+                className="w-full"
               >
                 {isLoading ? (
                   'Processing...'
-                ) : formData.useStateChannel ? (
+                ) : formData.useStateChannel && activeChannels.length > 0 ? (
                   <>
                     <Zap className="h-4 w-4 mr-2" />
-                    Execute Instant Trade
+                    Execute Instant Trade (Gas-Free)
                   </>
                 ) : (
                   'Execute Trade'
@@ -533,7 +516,7 @@ export function TradingInterface() {
           <TabsContent value="limit" className="space-y-4 mt-8">
             <div className="space-y-4 flex flex-col gap-4">
               <div className='flex flex-col gap-2'>
-                <Label>Pay ({formData.fromToken.symbol}) at rate</Label>
+                <Label>Limit Price ({formData.toToken.symbol} per {formData.fromToken.symbol})</Label>
                 <Input
                   type="number"
                   placeholder="0.0"
@@ -543,7 +526,7 @@ export function TradingInterface() {
               </div>
               <Button
                 onClick={handleCreateLimitOrder}
-                disabled={isLoading || !formData.limitPrice || !formData.fromAmount}
+                disabled={isLoading || !formData.limitPrice || !formData.fromAmount || !isConnected}
                 className="w-full"
               >
                 <Clock className="h-4 w-4 mr-2" />
@@ -554,39 +537,31 @@ export function TradingInterface() {
 
           <TabsContent value="twap" className="space-y-4">
             <div className="space-y-4">
-              <div>
-                <Label>Total Amount ({formData.fromToken.symbol})</Label>
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={formData.fromAmount}
-                  onChange={(e) => setFormData({ ...formData, fromAmount: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Duration (minutes)</Label>
-                <Input
-                  type="number"
-                  placeholder="60"
-                  value={formData.twapDuration || ''}
-                  onChange={(e) => setFormData({ ...formData, twapDuration: parseInt(e.target.value) })}
-                />
-              </div>
-              <div>
-                <Label>Number of Trades</Label>
-                <Input
-                  type="number"
-                  placeholder="10"
-                  value={formData.twapIntervals || ''}
-                  onChange={(e) => setFormData({ ...formData, twapIntervals: parseInt(e.target.value) })}
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    placeholder="60"
+                    value={formData.twapDuration || ''}
+                    onChange={(e) => setFormData({ ...formData, twapDuration: parseInt(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <Label>Intervals</Label>
+                  <Input
+                    type="number"
+                    placeholder="10"
+                    value={formData.twapIntervals || ''}
+                    onChange={(e) => setFormData({ ...formData, twapIntervals: parseInt(e.target.value) })}
+                  />
+                </div>
               </div>
               <Button
                 onClick={handleCreateTWAPOrder}
-                disabled={isLoading || !formData.fromAmount || !formData.twapDuration || !formData.twapIntervals}
+                disabled={isLoading || !formData.twapDuration || !formData.twapIntervals || !formData.fromAmount || !isConnected}
                 className="w-full"
               >
-                <BarChart3 className="h-4 w-4 mr-2" />
                 {isLoading ? 'Creating...' : 'Create TWAP Order'}
               </Button>
             </div>
@@ -594,38 +569,31 @@ export function TradingInterface() {
 
           <TabsContent value="options" className="space-y-4">
             <div className="space-y-4">
-              <div>
-                <Label>Option Type</Label>
-                <Select
-                  value={formData.optionType || 'call'}
-                  onValueChange={(value) => setFormData({ ...formData, optionType: value as 'call' | 'put' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="call">Call Option</SelectItem>
-                    <SelectItem value="put">Put Option</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Strike Price</Label>
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={formData.strikePrice || ''}
-                  onChange={(e) => setFormData({ ...formData, strikePrice: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Premium ({formData.fromToken.symbol})</Label>
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={formData.fromAmount}
-                  onChange={(e) => setFormData({ ...formData, fromAmount: e.target.value })}
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>Option Type</Label>
+                  <Select
+                    value={formData.optionType || 'call'}
+                    onValueChange={(value) => setFormData({ ...formData, optionType: value as 'call' | 'put' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="call">Call</SelectItem>
+                      <SelectItem value="put">Put</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Strike Price</Label>
+                  <Input
+                    type="number"
+                    placeholder="0.0"
+                    value={formData.strikePrice || ''}
+                    onChange={(e) => setFormData({ ...formData, strikePrice: e.target.value })}
+                  />
+                </div>
               </div>
               <div>
                 <Label>Expiration (days)</Label>
@@ -638,10 +606,10 @@ export function TradingInterface() {
               </div>
               <Button
                 onClick={handleCreateOptionsOrder}
-                disabled={isLoading || !formData.strikePrice || !formData.fromAmount || !formData.expirationTime}
+                disabled={isLoading || !formData.strikePrice || !formData.expirationTime || !formData.fromAmount || !isConnected}
                 className="w-full"
               >
-                {isLoading ? 'Creating...' : `Create ${formData.optionType?.toUpperCase()} Option`}
+                {isLoading ? 'Creating...' : 'Create Options Order'}
               </Button>
             </div>
           </TabsContent>
