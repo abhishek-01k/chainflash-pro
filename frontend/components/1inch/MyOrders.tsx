@@ -68,7 +68,7 @@ const MyOrders = ({
         <Card>
             <CardHeader className="pb-4">
                 <CardTitle className="flex items-center justify-between space-x-2">
-                    <div>
+                    <div className='flex gap-2 items-center'>
                         <Clock className="h-5 w-5" />
                         <span>My Active Orders</span>
                         <Badge variant="outline" className="text-xs">
