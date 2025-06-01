@@ -125,88 +125,214 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
   }, [currentChainId, isValidChain]);
 
   // Complete order creation flow
-  const handleCreateOrder = useCallback(async () => {
-    console.log('handleCreateOrder called');
-    console.log('Current state:', {
-      address,
-      makerToken: makerToken?.symbol,
-      takerToken: takerToken?.symbol,
-      makerAmount,
-      takerAmount,
-      oneInchApiKey: !!oneInchApiKey,
-      chainId: currentChainId
-    });
+  // const handleCreateOrder = useCallback(async () => {
+  //   console.log('handleCreateOrder called');
+  //   console.log('Current state:', {
+  //     address,
+  //     makerToken: makerToken?.symbol,
+  //     takerToken: takerToken?.symbol,
+  //     makerAmount,
+  //     takerAmount,
+  //     oneInchApiKey: !!oneInchApiKey,
+  //     chainId: currentChainId
+  //   });
 
-    if (!address || !makerToken || !takerToken || !oneInchApiKey) {
-      console.log('Early return - missing required data');
-      return;
-    }
+  //   if (!address || !makerToken || !takerToken || !oneInchApiKey) {
+  //     console.log('Early return - missing required data');
+  //     return;
+  //   }
 
+  //   try {
+  //     setIsLoading(true);
+  //     setError(null);
+  //     console.log('Starting order creation...');
+
+  //     // Validate input amounts
+  //     if (!makerAmount || !takerAmount) {
+  //       throw new Error('Please enter both maker and taker amounts');
+  //     }
+
+  //     const makingAmountBigInt = parseUnits(makerAmount, makerToken.decimals);
+  //     // const makingAmountBigInt = makerAmount
+  //     // const takingAmountBigInt = takerAmount
+  //     const takingAmountBigInt = parseUnits(takerAmount, takerToken.decimals);
+
+  //     console.log('Parsed amounts:', {
+  //       makingAmountBigInt: makingAmountBigInt.toString(),
+  //       takingAmountBigInt: takingAmountBigInt.toString()
+  //     });
+
+  //     // Step 1: Create order via API route
+  //     console.log('Creating limit order via API...');
+  //     const createResponse = await fetch('/api/1inch/limit-orders/create', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         makerAsset: makerToken.address,
+  //         takerAsset: takerToken.address,
+  //         makingAmount: makingAmountBigInt.toString(),
+  //         takingAmount: takingAmountBigInt.toString(),
+  //         maker: address,
+  //         chainId: currentChainId,
+  //         expiration: parseInt(expiration),
+  //         allowPartialFill: true,
+  //         allowPriceImprovement: true,
+  //       }),
+  //     });
+
+  //     console.log("create response", createResponse);
+
+  //     if (!createResponse.ok) {
+  //       const errorData = await createResponse.json();
+  //       throw new Error(errorData.error || 'Failed to create order');
+  //     }
+
+  //     const { order, typedData, orderHash } = await createResponse.json();
+  //     console.log('Order created successfully:', { orderHash });
+
+  //     setCurrentOrder({
+  //       order,
+  //       signature: '',
+  //       orderHash,
+  //       status: 'draft',
+  //       typedData,
+  //     });
+
+  //     // Step 2: Sign order
+  //     setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'signing' } : null);
+
+  //     console.log('Starting order signing...');
+  //     const signature = await new Promise<string>((resolve, reject) => {
+  //       signTypedData({
+  //         domain: typedData.domain,
+  //         types: { Order: typedData.types.Order },
+  //         primaryType: 'Order',
+  //         message: typedData.message,
+  //       }, {
+  //         onSuccess: (data) => {
+  //           console.log('Order signed successfully');
+  //           resolve(data);
+  //         },
+  //         onError: (error) => {
+  //           console.error('Error signing order:', error);
+  //           reject(error);
+  //         },
+  //       });
+  //     });
+
+  //     console.log('Order signed:', signature);
+
+  //     setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, signature, status: 'signed' } : null);
+
+  //     // Step 3: Submit to 1inch via API route
+  //     setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitting' } : null);
+
+  //     console.log('Submitting order to 1inch via API...');
+  //     const submitResponse = await fetch('/api/1inch/limit-orders/submit', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         orderData: {
+  //           ...order,
+  //           orderHash,
+  //         },
+  //         signature,
+  //         chainId: currentChainId,
+  //       }),
+  //     });
+
+  //     if (!submitResponse.ok) {
+  //       const errorData = await submitResponse.json();
+  //       throw new Error(errorData.error || 'Failed to submit order');
+  //     }
+
+  //     const submitResult = await submitResponse.json();
+  //     console.log('Order submitted successfully:', submitResult);
+
+  //     setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitted' } : null);
+
+  //     toast({
+  //       title: 'Limit Order Created',
+  //       description: `Order submitted successfully!`,
+  //     });
+
+  //     // Refresh active orders
+  //     if (address && currentChainId) {
+  //       try {
+  //         const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
+  //         if (response.ok) {
+  //           const { orders } = await response.json();
+  //           setActiveOrders(orders || []);
+  //         }
+  //       } catch (error) {
+  //         console.error('Error refreshing active orders after order creation:', error);
+  //       }
+  //     }
+
+  //     // Reset form
+  //     setMakerAmount('');
+  //     setTakerAmount('');
+  //     setTimeout(() => setCurrentOrder(null), 3000);
+
+  //   } catch (err: any) {
+  //     console.error('Error creating limit order:', err);
+  //     setError(err.message || 'Failed to create limit order');
+  //     setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'error' } : null);
+
+  //     toast({
+  //       title: 'Order Creation Failed',
+  //       description: err.message || 'Failed to create limit order',
+  //       variant: 'destructive',
+  //     });
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // }, [address, makerToken, takerToken, makerAmount, takerAmount, expiration, currentChainId, oneInchApiKey, signTypedData, toast]);
+
+
+  const handleCreateLimitOrder = async () => {
     try {
+
+      console.log('handleCreateOrder called');
+      console.log('Current state:', {
+        address,
+        makerToken: makerToken?.symbol,
+        takerToken: takerToken?.symbol,
+        makerAmount,
+        takerAmount,
+        oneInchApiKey: !!oneInchApiKey,
+        chainId: currentChainId
+      });
+
+      if (!address || !makerToken || !takerToken || !oneInchApiKey) {
+        console.log('Early return - missing required data');
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
       console.log('Starting order creation...');
 
-      // Validate input amounts
-      if (!makerAmount || !takerAmount) {
-        throw new Error('Please enter both maker and taker amounts');
-      }
 
-      // const makingAmountBigInt = parseUnits(makerAmount, makerToken.decimals);
-      const makingAmountBigInt = makerAmount
-      const takingAmountBigInt = takerAmount
-      // const takingAmountBigInt = parseUnits(takerAmount, takerToken.decimals);
+      const makingAmountBigInt = parseUnits(makerAmount, makerToken.decimals);
+      const takingAmountBigInt = parseUnits(takerAmount, takerToken.decimals);
 
-      console.log('Parsed amounts:', {
-        makingAmountBigInt: makingAmountBigInt.toString(),
-        takingAmountBigInt: takingAmountBigInt.toString()
-      });
+      const response = await fetch(`/api/1inch/orderbook/create?makerToken=${makerToken.address}&takerToken=${takerToken.address}&makingAmount=${makingAmountBigInt}&takingAmount=${takingAmountBigInt}&expiration=${Math.floor(Date.now() / 1000) + 604800}&address=${address}&chainId=${currentChainId}`)
+      const data = await response.json()
+      console.log('API Response:', data)
 
-      // Step 1: Create order via API route
-      console.log('Creating limit order via API...');
-      const createResponse = await fetch('/api/1inch/limit-orders/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          makerAsset: makerToken.address,
-          takerAsset: takerToken.address,
-          makingAmount: makingAmountBigInt.toString(),
-          takingAmount: takingAmountBigInt.toString(),
-          maker: address,
-          chainId: currentChainId,
-          expiration: parseInt(expiration),
-          allowPartialFill: true,
-          allowPriceImprovement: true,
-        }),
-      });
-
-      if (!createResponse.ok) {
-        const errorData = await createResponse.json();
-        throw new Error(errorData.error || 'Failed to create order');
-      }
-
-      const { order, typedData, orderHash } = await createResponse.json();
+      const { typedData, orderHash, extension } = data
       console.log('Order created successfully:', { orderHash });
 
-      setCurrentOrder({
-        order,
-        signature: '',
-        orderHash,
-        status: 'draft',
-        typedData,
-      });
-
-      // Step 2: Sign order
-      setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'signing' } : null);
-
-      console.log('Starting order signing...');
       const signature = await new Promise<string>((resolve, reject) => {
         signTypedData({
           domain: typedData.domain,
-          types: { Order: typedData.types.Order },
-          primaryType: 'Order',
+          types: typedData.types,
+          primaryType: typedData.primaryType,
           message: typedData.message,
         }, {
           onSuccess: (data) => {
@@ -222,126 +348,58 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
       console.log('Order signed:', signature);
 
-      setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, signature, status: 'signed' } : null);
+      const orderData = {
+        orderHash: orderHash,
+        signature: signature,
+        data: {
+          makerAsset: typedData.message.makerAsset,
+          takerAsset: typedData.message.takerAsset,
+          maker: typedData.message.maker,
+          receiver: typedData.message.receiver,
+          makingAmount: typedData.message.makingAmount,
+          takingAmount: typedData.message.takingAmount,
+          salt: typedData.message.salt,
+          extension: extension,
+          makerTraits: typedData.message.makerTraits
+        }
+      }
 
-      // Step 3: Submit to 1inch via API route
-      setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitting' } : null);
+      console.log("Submitting order data:", orderData);
 
-      console.log('Submitting order to 1inch via API...');
-      const submitResponse = await fetch('/api/1inch/limit-orders/submit', {
+      const res = await fetch('/api/1inch/orderbook/submit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          orderData: {
-            ...order,
-            orderHash,
-          },
-          signature,
-          chainId: currentChainId,
-        }),
+        body: JSON.stringify(orderData),
       });
 
-      if (!submitResponse.ok) {
-        const errorData = await submitResponse.json();
-        throw new Error(errorData.error || 'Failed to submit order');
+      const orderResponse = await res.json();
+      console.log("Order submission response:", orderResponse);
+
+      if (!orderResponse.ok) {
+        throw new Error(orderResponse.error || 'Failed to submit order');
       }
-
-      const submitResult = await submitResponse.json();
-      console.log('Order submitted successfully:', submitResult);
-
-      setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'submitted' } : null);
 
       toast({
         title: 'Limit Order Created',
         description: `Order submitted successfully!`,
       });
 
-      // Refresh active orders
-      if (address && currentChainId) {
-        try {
-          const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
-          if (response.ok) {
-            const { orders } = await response.json();
-            setActiveOrders(orders || []);
-          }
-        } catch (error) {
-          console.error('Error refreshing active orders after order creation:', error);
-        }
-      }
-
-      // Reset form
-      setMakerAmount('');
-      setTakerAmount('');
-      setTimeout(() => setCurrentOrder(null), 3000);
-
-    } catch (err: any) {
-      console.error('Error creating limit order:', err);
-      setError(err.message || 'Failed to create limit order');
+    } catch (error: any) {
+      console.error("Error building and signing order:", error);
+      setError(error.message || 'Failed to create limit order');
       setCurrentOrder((prev: LimitOrderData | null) => prev ? { ...prev, status: 'error' } : null);
 
       toast({
         title: 'Order Creation Failed',
-        description: err.message || 'Failed to create limit order',
+        description: error.message || 'Failed to create limit order',
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
     }
-  }, [address, makerToken, takerToken, makerAmount, takerAmount, expiration, currentChainId, oneInchApiKey, signTypedData, toast]);
-
-  // Cancel order
-  const handleCancelOrder = useCallback(async (orderHash: string) => {
-    if (!oneInchApiKey) return;
-
-    try {
-      setIsLoading(true);
-
-      const response = await fetch('/api/1inch/limit-orders/cancel', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          orderHash,
-          chainId: currentChainId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to cancel order');
-      }
-
-      toast({
-        title: 'Order Cancelled',
-        description: 'Limit order has been cancelled successfully',
-      });
-
-      // Refresh active orders
-      if (address && currentChainId) {
-        try {
-          const response = await fetch(`/api/1inch/limit-orders/active?maker=${address}&chainId=${currentChainId}`);
-          if (response.ok) {
-            const { orders } = await response.json();
-            setActiveOrders(orders || []);
-          }
-        } catch (error) {
-          console.error('Error refreshing active orders after cancellation:', error);
-        }
-      }
-    } catch (err: any) {
-      toast({
-        title: 'Cancellation Failed',
-        description: err.message || 'Failed to cancel order',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentChainId, oneInchApiKey, toast, address]);
-
+  }
   return (
     <div className={`space-y-6 ${className}`}>
       <Tabs defaultValue="create" className="w-full space-y-6">
@@ -572,7 +630,7 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
                 {/* Create Order Button */}
                 <Button
-                  onClick={handleCreateOrder}
+                  onClick={handleCreateLimitOrder}
                   disabled={!makerToken || !takerToken || !makerAmount || !takerAmount || isLoading || isSigningPending}
                   className="w-full h-12 text-base font-medium"
                   size="lg"
@@ -596,12 +654,9 @@ export function LimitOrderInterface({ className, makerToken, takerToken, setMake
 
         <TabsContent value="orders">
           <MyOrders
-            handleCancelOrder={handleCancelOrder}
             tokens={tokens}
             isLoading={isLoading}
           />
-
-
         </TabsContent>
       </Tabs>
     </div>

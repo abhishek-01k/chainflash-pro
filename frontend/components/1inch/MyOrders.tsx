@@ -9,12 +9,10 @@ import { formatUnits } from 'viem';
 
 
 type MyOrderProps = {
-    handleCancelOrder: (orderHash: string) => void;
     isLoading: boolean
     tokens: Record<string, OneInchTokenInfo>
 }
 const MyOrders = ({
-    handleCancelOrder,
     isLoading,
     tokens
 }: MyOrderProps) => {
@@ -59,6 +57,11 @@ const MyOrders = ({
     const getTokenName = (tokenAddress: string, tokens: Record<string, OneInchTokenInfo>): string => {
         const token = tokens[tokenAddress.toLowerCase()];
         return token ? token.symbol : tokenAddress;
+    };
+
+    const getTokenDecimals = (tokenAddress: string, tokens: Record<string, OneInchTokenInfo>): number => {
+        const token = tokens[tokenAddress.toLowerCase()];
+        return token ? token.decimals : 18;
     };
 
     console.log("activeOrders", activeOrders);
@@ -110,26 +113,13 @@ const MyOrders = ({
                                             </Badge>
                                         </div>
                                         <div className="text-sm text-muted-foreground">
-                                            Pay: {formatUnits(BigInt(order.data?.makingAmount || 0), 18)} {getTokenName(order.data?.makerAsset, tokens)} •
-                                            Receive: {formatUnits(BigInt(order.data?.takingAmount || 0), 18)} {getTokenName(order.data?.takerAsset, tokens)}
+                                            Pay: {formatUnits(BigInt(order.data?.makingAmount || 0), getTokenDecimals(order.data?.makerAsset, tokens))} {getTokenName(order.data?.makerAsset, tokens)} •
+                                            Receive: {formatUnits(BigInt(order.data?.takingAmount || 0), getTokenDecimals(order.data?.takerAsset, tokens))} {getTokenName(order.data?.takerAsset, tokens)}
                                         </div>
                                         <div className="text-xs text-muted-foreground font-mono">
                                             Hash: {order.orderHash?.slice(0, 20)}...
                                         </div>
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleCancelOrder(order.orderHash)}
-                                        disabled={isLoading}
-                                        className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20"
-                                    >
-                                        {isLoading ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                            'Cancel'
-                                        )}
-                                    </Button>
                                 </div>
                             </div>
                         ))}

@@ -6,29 +6,14 @@ import React from 'react';
 
 const ChannelPage = () => {
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-12">
-                <div className="flex flex-col space-y-2">
-                    <h1 className="text-3xl font-bold tracking-tight">
-                        ChainFlash Pro
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Cross-chain state channel trading with instant settlements
-                    </p>
-                </div>
+        <div className="flex flex-col gap-4 sm:gap-6 max-w-[1200px] mx-auto mt-12 sm:mt-16 md:mt-24 px-3 sm:px-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <StateChannelManager />
+                <ArbitrageAlerts />
             </div>
 
-            <div className="lg:col-span-4">
-                <div className="space-y-6">
-                    <StateChannelManager />
-
-                    <OrderBook />
-
-                    <ArbitrageAlerts />
-                </div>
-            </div>
-
-            <div className="lg:col-span-12">
+            <div className="flex flex-col gap-4 sm:gap-6">
+                <OrderBook />
                 <Portfolio />
             </div>
         </div>
