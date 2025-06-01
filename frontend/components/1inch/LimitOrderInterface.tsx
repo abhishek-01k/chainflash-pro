@@ -19,7 +19,6 @@ import { useToast } from '@/hooks/use-toast';
 import { TokenSelector } from './TokenSelector';
 import { PriceChart } from '@/components/charts/price-chart';
 import MyOrders from './MyOrders';
-import { fetchChartData } from '@/lib/api/1inch/charts';
 
 interface LimitOrderInterfaceProps {
   className?: string;

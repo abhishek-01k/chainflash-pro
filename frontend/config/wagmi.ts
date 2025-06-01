@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { mainnet, arbitrum, optimism, polygon, sepolia, arbitrumSepolia, base } from 'wagmi/chains';
+import { mainnet, arbitrum, optimism, polygon, sepolia, arbitrumSepolia, base, celo } from 'wagmi/chains';
 import { http } from 'viem';
 
 // Environment variables with fallbacks
@@ -45,6 +45,13 @@ const chains = [
     rpcUrls: {
       default: { http: [`https://base-mainnet.g.alchemy.com/v2/${alchemyApiKey}`] },
       public: { http: ['https://base.llamarpc.com'] },
+    },
+  },
+  {
+    ...celo,
+    rpcUrls: {
+      default: { http: [` https://celo-mainnet.g.alchemy.com/v2/${alchemyApiKey}`] },
+      public: { http: ['https://celo.drpc.org'] },
     },
   },
 ] as const;
