@@ -38,7 +38,7 @@ export function StateChannelManager() {
     challengePeriod: '3600', // 1 hour default
     initialDeposit: '',
     userAllocation: '50', // percentage for user
-    network: '42220' // CELO default
+    network: '137' // Polygon default
   });
 
   // Deposit form
@@ -73,7 +73,7 @@ export function StateChannelManager() {
 
     try {
       setIsLoading(true);
-      const chainId = parseInt(createForm.network);
+      const chainId = parseInt(createForm.network) || 137; // Default to Polygon
       await nitroliteService.initializeWithWallet(walletClient, chainId, address);
       setIsInitialized(true);
       
@@ -210,6 +210,7 @@ export function StateChannelManager() {
     try {
       setIsLoading(true);
       
+      console.log('depositForm', depositForm);
       // First approve tokens if needed
       if (depositForm.tokenAddress) {
         const depositAmount = BigInt(Math.floor(parseFloat(depositForm.amount) * Math.pow(10, 18)));
@@ -484,7 +485,7 @@ export function StateChannelManager() {
                   </div>
 
                   <div>
-                    <Label htmlFor="deposit">Initial Deposit (ETH) *</Label>
+                    <Label htmlFor="deposit">Initial Deposit (ETH) or ERC20 Token *</Label>
                     <Input
                       id="deposit"
                       type="number"

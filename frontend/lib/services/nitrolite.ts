@@ -86,13 +86,11 @@ class NitroliteService {
   private client: NitroliteClient | null = null;
   private wsConnection: WebSocket | null = null;
   private channelSubscriptions: Map<string, (update: ChannelState) => void> = new Map();
-  private currentChain: any = celo; // Start with CELO as it has live contracts
+  private currentChain: any = polygon; // Start with Polygon as it has live contracts
   private userAccount: any = null;
   private connectedWalletClient: any = null;
 
-  constructor() {
-    // Don't initialize automatically - wait for user input
-  }
+  constructor() {}
 
   // Initialize with user's wallet and selected network
   async initializeWithWallet(
@@ -208,8 +206,13 @@ class NitroliteService {
   async deposit(amount: bigint): Promise<string> {
     this.validateClient();
 
+    // change the amount as per the decimals of the token
+    const tokenDecimals = 6;
+    const amountInWei = amount * 10n ** BigInt(tokenDecimals);
+    console.log('amountInWei', amountInWei);
+
     try {
-      const txHash = await this.client!.deposit(amount);
+      const txHash = await this.client!.deposit(amountInWei);
       console.log('Deposit successful:', txHash);
       return txHash;
     } catch (error) {
