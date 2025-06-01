@@ -1,55 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getOneInchLimitOrderSDK, type LimitOrderSDKConfig } from '@/lib/services/1inch-limit-order-sdk';
-import type { SupportedChainId } from '@/lib/services/1inch';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+const BASE_URL = 'https://api.1inch.dev/orderbook/v4.0';
+const API_KEY = process.env.ONEINCH_API_KEY;
+
+export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const maker = searchParams.get('maker');
+    const address = searchParams.get('address');
     const chainId = searchParams.get('chainId');
+    const page = searchParams.get('page') || '1';
+    const limit = searchParams.get('limit') || '100';
 
-    // Validate required fields
-    if (!maker || !chainId) {
+    if (!address || !chainId) {
       return NextResponse.json(
-        { error: 'Missing required query parameters: maker and chainId are required' },
+        { error: ' Missing parameter...' },
         { status: 400 }
       );
     }
 
-    // Get API key from environment
-    const apiKey = process.env.NEXT_PUBLIC_1INCH_API_KEY || process.env.NEXT_PUBLIC_ONEINCH_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: '1inch API key not configured' },
-        { status: 500 }
-      );
+    const response = await fetch(
+      `${BASE_URL}/${chainId}/address/${address}?page=${page}&limit=${limit}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'accept': 'application/json',
+          'content-type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`1inch API error: ${response.statusText}`);
     }
 
-    // Initialize SDK
-    const sdkConfig: LimitOrderSDKConfig = {
-      authKey: apiKey,
-      networkId: parseInt(chainId) as SupportedChainId
-    };
-    
-    const sdk = getOneInchLimitOrderSDK(sdkConfig);
-
-    console.log('Getting active orders for maker:', maker);
-
-    // Get active orders
-    const orders = await sdk.getActiveOrders(maker);
-
-    console.log(`Found ${orders.length} active orders`);
-
-    return NextResponse.json({
-      success: true,
-      orders,
-    });
-
-  } catch (error: any) {
-    console.error('Error getting active orders:', error);
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Error fetching active orders:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get active orders' },
+      { error: 'Failed to fetch active orders' },
       { status: 500 }
     );
   }
-} 
+}

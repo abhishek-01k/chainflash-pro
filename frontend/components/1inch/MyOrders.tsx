@@ -2,10 +2,11 @@ import oneInchService, { OneInchTokenInfo, SupportedChainId } from '@/lib/servic
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, Loader2, Plus, Target } from 'lucide-react';
+import { Clock, Loader2, Plus, RefreshCw, Target } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { formatUnits } from 'viem';
+import { cn } from '@/lib/utils';
 
 
 type MyOrderProps = {
@@ -29,7 +30,6 @@ const MyOrders = ({
 
     // Helper function to refresh active orders
     const refreshActiveOrders = async () => {
-        console.log('refreshActiveOrders called with:', { address, currentChainId });
         if (!address || !currentChainId) return;
 
         try {
@@ -64,17 +64,28 @@ const MyOrders = ({
         return token ? token.decimals : 18;
     };
 
-    console.log("activeOrders", activeOrders);
-
     return (
         <Card>
             <CardHeader className="pb-4">
-                <CardTitle className="flex items-center space-x-2">
-                    <Clock className="h-5 w-5" />
-                    <span>My Active Orders</span>
-                    <Badge variant="outline" className="text-xs">
-                        {activeOrders.length} orders
-                    </Badge>
+                <CardTitle className="flex items-center justify-between space-x-2">
+                    <div>
+                        <Clock className="h-5 w-5" />
+                        <span>My Active Orders</span>
+                        <Badge variant="outline" className="text-xs">
+                            {activeOrders.length} orders
+                        </Badge>
+                    </div>
+
+                    <Button
+                        onClick={refreshActiveOrders}
+                        disabled={isLoading}
+                        variant="outline"
+                        size="sm"
+                        className='hover:bg-gray-500/10 transition-colors'
+                    >
+                        <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+                        {isLoading ? 'Loading...' : 'Refresh'}
+                    </Button>
                 </CardTitle>
             </CardHeader>
             <CardContent>

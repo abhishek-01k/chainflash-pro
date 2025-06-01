@@ -1,9 +1,9 @@
-import { 
-  LimitOrder, 
-  MakerTraits, 
-  Address, 
-  Sdk, 
-  randBigInt, 
+import {
+  LimitOrder,
+  MakerTraits,
+  Address,
+  Sdk,
+  randBigInt,
   Api,
   RfqOrder
 } from '@1inch/limit-order-sdk';
@@ -13,15 +13,15 @@ import type { SupportedChainId } from './1inch';
 // Simple HTTP provider implementation using fetch
 class FetchProviderConnector {
   async get<T>(url: string, headers: Record<string, string>): Promise<T> {
-    const response = await fetch(url, { 
+    const response = await fetch(url, {
       method: 'GET',
-      headers 
+      headers
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     return await response.json();
   }
 
@@ -34,11 +34,11 @@ class FetchProviderConnector {
       },
       body: JSON.stringify(data)
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     return await response.json();
   }
 }
@@ -122,7 +122,7 @@ export class OneInchLimitOrderSDK {
   async getFeeInfo(makerAsset: string, takerAsset: string, makingAmount: bigint, takingAmount: bigint): Promise<any> {
     try {
       const url = `https://api.1inch.dev/orderbook/v4.0/${this.networkId}/fee-info?makerAsset=${makerAsset}&takerAsset=${takerAsset}&makerAmount=${makingAmount.toString()}&takerAmount=${takingAmount.toString()}`;
-      
+
       const feeInfo = await this.httpConnector.get(url, {
         'Authorization': `Bearer ${this.authKey}`,
         'Accept': 'application/json',
@@ -156,7 +156,7 @@ export class OneInchLimitOrderSDK {
   async createLimitOrder(params: CreateOrderParams): Promise<LimitOrder> {
     try {
       console.log('Attempting to create limit order with fee info...');
-      
+
       const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
       const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
 
@@ -202,11 +202,11 @@ export class OneInchLimitOrderSDK {
       return order;
     } catch (error: any) {
       console.error('Error in createLimitOrder with fee info:', error);
-      
+
       // If the error is related to fee params or whitelist, use direct method
       if (error.message && (
-        error.message.includes('feeParams') || 
-        error.message.includes('whitelist') || 
+        error.message.includes('feeParams') ||
+        error.message.includes('whitelist') ||
         error.message.includes('map is not a function')
       )) {
         console.log('Fee-related error detected, using direct order creation...');
@@ -321,8 +321,9 @@ export class OneInchLimitOrderSDK {
   async getActiveOrders(maker: string): Promise<any[]> {
     try {
       const orders = await this.getOrdersByMaker(maker);
+
       // Filter only active orders
-      return Array.isArray(orders) ? orders.filter((order: any) => 
+      return Array.isArray(orders) ? orders.filter((order: any) =>
         order.status === 'active' || order.status === 'pending'
       ) : [];
     } catch (error) {
@@ -373,7 +374,7 @@ export class OneInchLimitOrderSDK {
    */
   updateNetwork(networkId: SupportedChainId) {
     this.networkId = networkId;
-    
+
     this.sdk = new Sdk({
       authKey: this.authKey,
       networkId: this.networkId,
@@ -447,7 +448,7 @@ export class OneInchLimitOrderSDK {
   async createLimitOrderDirect(params: CreateOrderParams): Promise<LimitOrder> {
     try {
       console.log('Creating limit order directly without fee info...');
-      
+
       const expiresIn = BigInt(params.expiration || 3600); // 1 hour default
       const expiration = BigInt(Math.floor(Date.now() / 1000)) + expiresIn;
 
@@ -479,10 +480,10 @@ export class OneInchLimitOrderSDK {
       };
 
       console.log('Creating order with direct method:', orderData);
-      
+
       // Create order with minimal SDK usage to avoid fee issues
       const order = new LimitOrder(orderData, makerTraits);
-      
+
       console.log('Order created successfully with direct method');
       return order;
     } catch (error: any) {
