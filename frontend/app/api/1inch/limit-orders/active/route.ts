@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server';
 
 const BASE_URL = 'https://api.1inch.dev/orderbook/v4.0';
 const API_KEY = process.env.ONEINCH_API_KEY;
-import { NextResponse } from 'next/server';
 
-const BASE_URL = 'https://api.1inch.dev/orderbook/v4.0';
-const API_KEY = process.env.ONEINCH_API_KEY;
+
 
 export async function GET(request: Request) {
     try {
