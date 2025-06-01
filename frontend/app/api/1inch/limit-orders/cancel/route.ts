@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getOneInchLimitOrderSDK, type LimitOrderSDKConfig } from '@/lib/services/1inch-limit-order-sdk';
 import type { SupportedChainId } from '@/lib/services/1inch';
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const maker = searchParams.get('maker');
-    const chainId = searchParams.get('chainId');
+    const body = await request.json();
+    
+    const {
+      orderHash,
+      chainId,
+    } = body;
 
     // Validate required fields
-    if (!maker || !chainId) {
+    if (!orderHash || !chainId) {
       return NextResponse.json(
-        { error: 'Missing required query parameters: maker and chainId are required' },
+        { error: 'Missing required fields: orderHash and chainId are required' },
         { status: 400 }
       );
     }
@@ -28,27 +31,27 @@ export async function GET(request: NextRequest) {
     // Initialize SDK
     const sdkConfig: LimitOrderSDKConfig = {
       authKey: apiKey,
-      networkId: parseInt(chainId) as SupportedChainId
+      networkId: chainId as SupportedChainId
     };
     
     const sdk = getOneInchLimitOrderSDK(sdkConfig);
 
-    console.log('Getting active orders for maker:', maker);
+    console.log('Canceling order:', orderHash);
 
-    // Get active orders
-    const orders = await sdk.getActiveOrders(maker);
+    // Cancel the order
+    const result = await sdk.cancelOrder(orderHash);
 
-    console.log(`Found ${orders.length} active orders`);
+    console.log('Order canceled successfully:', result);
 
     return NextResponse.json({
       success: true,
-      orders,
+      result,
     });
 
   } catch (error: any) {
-    console.error('Error getting active orders:', error);
+    console.error('Error canceling order:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get active orders' },
+      { error: error.message || 'Failed to cancel order' },
       { status: 500 }
     );
   }
